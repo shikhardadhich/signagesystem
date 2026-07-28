@@ -1,14 +1,17 @@
 /**
- * Storage for submissions, with two interchangeable drivers.
+ * Storage for submissions, with interchangeable drivers.
  *
- *   local  — images on disk in uploads/, records in a module-level array.
- *            Zero setup: this is what `npm start` uses on a laptop.
- *   cloud  — images in Vercel Blob, records in Redis. Required on Vercel,
- *            where the filesystem is read-only and every request may land on
- *            a different instance.
+ *   local    — images on disk in uploads/, records in a module-level array.
+ *              Zero setup: this is what `npm start` uses on a laptop.
+ *   firebase — images in Cloud Storage, records in Firestore.
+ *   vercel   — images in Vercel Blob, records in Redis.
  *
- * The driver is chosen from the environment, so the same code runs in both
- * places and neither one needs a flag.
+ * Both hosted drivers exist for the same reason: on a serverless runtime the
+ * filesystem is read-only and consecutive requests may land on different
+ * instances, so disk + memory silently loses data.
+ *
+ * The driver is picked from the environment, so the same code runs everywhere
+ * without a build flag. STORAGE_DRIVER forces a specific one.
  */
 
 const fs = require('fs');
@@ -16,9 +19,15 @@ const path = require('path');
 
 const UPLOAD_DIR = path.join(__dirname, 'uploads');
 
+const hasFirebase = Boolean(
+  process.env.FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_CONFIG || process.env.GCLOUD_PROJECT
+);
 const hasBlob = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
 const hasRedis = Boolean(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
-const useCloud = hasBlob && hasRedis;
+const hasVercel = hasBlob && hasRedis;
+
+const forced = process.env.STORAGE_DRIVER;
+const chosen = forced || (hasFirebase ? 'firebase' : hasVercel ? 'vercel' : 'local');
 
 function makeId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -47,8 +56,9 @@ function newSubmission(name, message) {
 
 function localDriver() {
   const submissions = [];
-  // On Vercel the filesystem is read-only, so this fails. Tolerate it: the
-  // pages should still render and explain themselves rather than 500 on boot.
+  // On a serverless host the filesystem is read-only, so this fails. Tolerate
+  // it: the pages should still render and explain themselves rather than 500
+  // on boot.
   let writable = true;
   try {
     fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -61,8 +71,8 @@ function localDriver() {
     async add(name, message, file) {
       if (!writable) {
         const err = new Error(
-          'Photo storage is not configured on this deployment. Add a Blob store and a Redis store, ' +
-          'then redeploy — see README.md.'
+          'Photo storage is not configured on this deployment. Connect a storage backend ' +
+          'and redeploy — see README.md.'
         );
         err.status = 503;
         throw err;
@@ -91,9 +101,66 @@ function localDriver() {
   };
 }
 
-/* --------------------------------------------------------------- cloud -- */
+/* ------------------------------------------------------------ firebase -- */
 
-function cloudDriver() {
+function firebaseDriver() {
+  const admin = require('firebase-admin');
+  const { randomUUID } = require('crypto');
+
+  if (!admin.apps.length) {
+    admin.initializeApp(
+      process.env.FIREBASE_STORAGE_BUCKET
+        ? { storageBucket: process.env.FIREBASE_STORAGE_BUCKET }
+        : undefined
+    );
+  }
+  const db = admin.firestore();
+  const bucket = admin.storage().bucket();
+  const COLLECTION = 'submissions';
+
+  return {
+    name: 'firebase',
+    async add(name, message, file) {
+      const submission = newSubmission(name, message);
+      const objectPath = `selfies/${submission.id}${extensionFor(file)}`;
+
+      // A download token gives a stable public URL without needing object ACLs,
+      // which uniform bucket-level access blocks outright.
+      const token = randomUUID();
+      await bucket.file(objectPath).save(file.buffer, {
+        resumable: false,
+        contentType: file.mimetype,
+        metadata: { metadata: { firebaseStorageDownloadTokens: token } },
+      });
+      submission.url =
+        `https://firebasestorage.googleapis.com/v0/b/${bucket.name}` +
+        `/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`;
+
+      await db.collection(COLLECTION).doc(submission.id).set(submission);
+      return submission;
+    },
+    async list() {
+      const snap = await db.collection(COLLECTION).get();
+      return snap.docs.map((d) => d.data());
+    },
+    async get(id) {
+      const doc = await db.collection(COLLECTION).doc(id).get();
+      return doc.exists ? doc.data() : null;
+    },
+    async setStatus(id, status) {
+      const ref = db.collection(COLLECTION).doc(id);
+      const doc = await ref.get();
+      if (!doc.exists) return null;
+      const updated = { ...doc.data(), status, decidedAt: Date.now() };
+      await ref.set(updated);
+      return updated;
+    },
+  };
+}
+
+/* -------------------------------------------------------------- vercel -- */
+
+function vercelDriver() {
   const { put } = require('@vercel/blob');
   const { Redis } = require('@upstash/redis');
   const redis = Redis.fromEnv();
@@ -102,7 +169,7 @@ function cloudDriver() {
   const key = (id) => `selfiewall:sub:${id}`;
 
   return {
-    name: 'cloud',
+    name: 'vercel',
     async add(name, message, file) {
       const submission = newSubmission(name, message);
       const blob = await put(`selfies/${submission.id}${extensionFor(file)}`, file.buffer, {
@@ -136,26 +203,38 @@ function cloudDriver() {
   };
 }
 
-const store = useCloud ? cloudDriver() : localDriver();
+const DRIVERS = { local: localDriver, firebase: firebaseDriver, vercel: vercelDriver };
+
+if (!DRIVERS[chosen]) {
+  throw new Error(`Unknown STORAGE_DRIVER "${chosen}" (expected local, firebase or vercel)`);
+}
+
+const store = DRIVERS[chosen]();
+
+const LABELS = {
+  local: 'local (disk + memory)',
+  firebase: 'firebase (Cloud Storage + Firestore)',
+  vercel: 'vercel (Blob + Redis)',
+};
 
 /**
- * Explains the active driver at boot, and warns when only half the cloud
- * configuration is present — that combination silently falls back to local
- * storage, which on Vercel means uploads vanish between requests.
+ * Explains the active driver at boot, and warns when a hosted backend is only
+ * half configured — that combination falls back to local storage, which on a
+ * serverless host means uploads vanish between requests.
  */
 store.describe = () => {
-  if (useCloud) return 'cloud (Vercel Blob + Redis)';
+  if (store.name !== 'local') return LABELS[store.name];
   if (hasBlob || hasRedis) {
     const missing = [
       hasBlob ? null : 'BLOB_READ_WRITE_TOKEN',
       hasRedis ? null : 'KV_REST_API_URL + KV_REST_API_TOKEN',
     ].filter(Boolean).join(' and ');
-    return `local (INCOMPLETE cloud config — missing ${missing})`;
+    return `local (INCOMPLETE Vercel config — missing ${missing})`;
   }
-  return 'local (disk + memory)';
+  return LABELS.local;
 };
 
-store.isCloud = useCloud;
+store.isCloud = store.name !== 'local';
 store.UPLOAD_DIR = UPLOAD_DIR;
 
 module.exports = store;

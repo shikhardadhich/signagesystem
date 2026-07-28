@@ -28,19 +28,57 @@ PUBLIC_URL=http://192.168.1.20:3000 npm start
 
 That URL is what gets encoded into the QR code and printed at startup.
 
-## Deploying to Vercel
+## Deploying
 
 The POC's original storage model — files on disk, queue in a local array — does
 not survive a serverless runtime: the filesystem is read-only and each request
-may hit a different instance. So `store.js` ships two drivers and picks one from
-the environment:
+may hit a different instance. So `store.js` ships three interchangeable drivers
+and picks one from the environment:
 
-| Driver | When | Images | Queue |
+| Driver | Selected when | Images | Queue |
 | --- | --- | --- | --- |
-| `local` | no storage env vars (i.e. `npm start`) | `uploads/` on disk | in-memory array |
-| `cloud` | both env groups present | Vercel Blob | Redis |
+| `local` | no cloud env vars (i.e. `npm start`) | `uploads/` on disk | in-memory array |
+| `firebase` | `FIREBASE_CONFIG` / `GCLOUD_PROJECT` present (set automatically in Cloud Functions) | Cloud Storage | Firestore |
+| `vercel` | `BLOB_READ_WRITE_TOKEN` + `KV_REST_API_*` present | Vercel Blob | Redis |
 
-Nothing to configure locally — the local driver stays the default. For Vercel:
+`STORAGE_DRIVER=local|firebase|vercel` forces one. Nothing to configure locally —
+the local driver stays the default, so `npm start` still needs no cloud account.
+
+`GET /api/health` reports which driver is live:
+
+```json
+{ "ok": true, "storage": "firebase (Cloud Storage + Firestore)", "cloud": true }
+```
+
+### Firebase
+
+Hosting serves `public/` from the CDN and rewrites everything else to a 2nd-gen
+Cloud Function wrapping the same Express app (`index.js`).
+
+```bash
+npm install -g firebase-tools
+firebase login
+firebase use --add            # pick your project, alias it "default"
+firebase deploy
+```
+
+The project needs **Cloud Storage** and **Firestore** enabled, and Cloud
+Functions requires the **Blaze** plan (the free tier still covers a POC's
+traffic). Firestore should be created in Native mode.
+
+Selfies are written with a Firebase download token, so their URLs work without
+making objects publicly readable — which matters because uniform bucket-level
+access blocks per-object ACLs outright. `storage.rules` and `firestore.rules`
+therefore deny all direct client access: every read and write goes through the
+function's Admin SDK, and browsers never talk to either service directly.
+
+To override the bucket (for example when it isn't the project default), set
+`FIREBASE_STORAGE_BUCKET`.
+
+### Vercel
+
+Hosting serves `public/` and rewrites the rest to the Express app in
+`api/index.js`.
 
 1. **Import the repo.** In the Vercel dashboard: *Add New → Project*, pick
    `shikhardadhich/signagesystem`, branch `claude/cafe-selfie-wall-poc-camucx`.
@@ -52,23 +90,19 @@ Nothing to configure locally — the local driver stays the default. For Vercel:
    - `KV_REST_API_URL` and `KV_REST_API_TOKEN`
 3. **Redeploy** so the function picks up the new variables.
 
-`GET /api/health` reports which driver is live:
+### Either way
 
-```json
-{ "ok": true, "storage": "cloud (Vercel Blob + Redis)", "cloud": true }
-```
-
-Until both stores are connected the deployment still renders all three pages,
-and uploads fail with an explicit 503 rather than a crash or a silent loss. The
-QR code encodes the request's own origin, so it points at the deployed domain
-with no configuration.
+Until a backend is connected the deployment still renders all three pages, and
+uploads fail with an explicit 503 rather than a crash or a silent loss. The QR
+code encodes the request's own origin, so it points at the deployed domain with
+no configuration.
 
 ## How it works
 
 - **Storage is deliberately throwaway locally.** Submissions live in an in-memory
   array and images land in `uploads/`, so restarting the server empties the wall.
-  There is no auth and no automated moderation. See *Deploying to Vercel* above
-  for the Blob + Redis driver that replaces this when deployed.
+  There is no auth and no automated moderation. See *Deploying* above for the
+  Firebase and Vercel drivers that replace this when hosted.
 - **Everything is polling, every 3 seconds.** The screen polls `/api/queue`, the
   admin page polls `/api/submissions`, and the phone polls `/api/status/:id` after
   submitting. No WebSockets to keep the moving parts down.
@@ -100,7 +134,11 @@ never leaves anything behind.
 
 ```
 server.js          Express app and routes (exports the app; listens only via npm start)
-store.js           storage drivers: disk + memory locally, Blob + Redis deployed
+store.js           storage drivers: local disk, Firebase, or Vercel
+index.js           Firebase Cloud Functions entry point
+firebase.json      Firebase Hosting rewrites + functions config
+storage.rules      denies direct client access to Cloud Storage
+firestore.rules    denies direct client access to Firestore
 api/index.js       Vercel serverless entry point
 vercel.json        routes non-static requests to the Express app
 public/theme.css   shared cafe palette + the branded photo template

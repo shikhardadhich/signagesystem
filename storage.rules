@@ -1,0 +1,13 @@
+rules_version = '2';
+
+// Every read and write goes through the Cloud Function, which uses the Admin
+// SDK and bypasses these rules. Browsers never talk to Cloud Storage directly,
+// so client access is denied outright. Uploaded selfies stay reachable because
+// their URLs carry a download token, which is checked before these rules.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
