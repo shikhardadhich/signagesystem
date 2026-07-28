@@ -76,16 +76,28 @@
     min-height: 0;
   }
 
-  /* --u is one pixel of assets/frame.png; 1vh/9.8 makes the framed photo about
-     600px wide on a 1080p panel. */
-  #frame {
-    --u: calc(1vh / 9.8);
-    opacity: 1;
-    transition: opacity 0.9s ease;
+  /* Two framed layers stacked in one grid cell. Rotating crossfades between
+     them, so the wall never dips to an empty stage the way a single fading
+     layer does. */
+  .deck {
+    display: grid;
+    place-items: center;
   }
 
-  #frame.is-fading {
+  /* --u is one pixel of assets/frame.png; 1vh/9.8 makes the framed photo about
+     600px wide on a 1080p panel. */
+  .layer {
+    --u: calc(1vh / 9.8);
+    grid-area: 1 / 1;
     opacity: 0;
+    transform: scale(0.985);
+    transition: opacity 0.9s var(--ease), transform 1.6s var(--ease);
+    pointer-events: none;
+  }
+
+  .layer.is-front {
+    opacity: 1;
+    transform: scale(1);
   }
 
   /* ---- empty state ---- */
@@ -171,6 +183,40 @@
     width: 0;
     background: linear-gradient(90deg, var(--gold) 0%, var(--gold-light) 100%);
   }
+
+  /* Shown only after polling has failed repeatedly, so a blip doesn't nag but
+     a genuinely dead server is visible to staff from across the room. */
+  .offline {
+    position: fixed;
+    top: 50%;
+    right: 3vh;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    gap: 1vh;
+    padding: 1vh 1.8vh;
+    border-radius: var(--r-pill);
+    background: rgba(162, 69, 47, 0.92);
+    color: #fff;
+    font-size: 1.7vh;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    box-shadow: 0 1vh 3vh rgba(0, 0, 0, 0.5);
+    transition: opacity var(--slow) var(--ease);
+  }
+
+  .offline__dot {
+    width: 1.1vh;
+    height: 1.1vh;
+    border-radius: 50%;
+    background: #fff;
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.25; }
+  }
 </style>
 </head>
 <body>
@@ -184,11 +230,19 @@
 </header>
 
 <main class="stage">
-  <div id="frame" class="template hidden">
-    <img id="photo" class="template__photo" alt="">
-    <div class="template__rule"></div>
-    <p id="name" class="template__name"></p>
-    <p id="message" class="template__message"></p>
+  <div id="deck" class="deck hidden" aria-live="polite">
+    <div class="template layer" data-layer="0">
+      <img class="template__photo" alt="">
+      <div class="template__rule"></div>
+      <p class="template__name"></p>
+      <p class="template__message"></p>
+    </div>
+    <div class="template layer" data-layer="1">
+      <img class="template__photo" alt="">
+      <div class="template__rule"></div>
+      <p class="template__name"></p>
+      <p class="template__message"></p>
+    </div>
   </div>
 
   <div id="placeholder" class="placeholder">
@@ -206,25 +260,35 @@
 
 <div class="counter" id="counter"></div>
 <div class="progress" id="progress"></div>
+<div class="offline hidden" id="offline"><span class="offline__dot"></span>Reconnecting</div>
 
 <script>
 const ROTATE_MS = 8000;
 const POLL_MS = 3000;
-const FADE_MS = 900;
+/* Two consecutive failures before crying wolf — a single dropped poll on a
+   cafe wifi is not worth a banner on the wall. */
+const OFFLINE_AFTER = 2;
 
 const el = {
-  frame: document.getElementById('frame'),
-  photo: document.getElementById('photo'),
-  name: document.getElementById('name'),
-  message: document.getElementById('message'),
+  deck: document.getElementById('deck'),
   placeholder: document.getElementById('placeholder'),
   counter: document.getElementById('counter'),
   progress: document.getElementById('progress'),
+  offline: document.getElementById('offline'),
 };
+
+const layers = [...document.querySelectorAll('.layer')].map((root) => ({
+  root,
+  photo: root.querySelector('.template__photo'),
+  name: root.querySelector('.template__name'),
+  message: root.querySelector('.template__message'),
+}));
 
 let queue = [];
 let index = 0;
+let front = 0;
 let rotateTimer = null;
+let failures = 0;
 
 /* ---- QR code ---- */
 
@@ -238,16 +302,22 @@ fetch('/api/qr')
 
 /* ---- polling ---- */
 
+const signature = (list) => list.map((s) => s.id).join(',');
+
 async function poll() {
   try {
-    const next = await (await fetch('/api/queue')).json();
+    const res = await fetch('/api/queue');
+    if (!res.ok) throw new Error(res.status);
+    const next = await res.json();
+    failures = 0;
+    el.offline.classList.add('hidden');
     if (signature(next) !== signature(queue)) applyQueue(next);
   } catch (err) {
-    /* Keep showing the last known queue if the server blips. */
+    // Keep showing the last known queue; only flag a sustained outage.
+    failures += 1;
+    if (failures >= OFFLINE_AFTER) el.offline.classList.remove('hidden');
   }
 }
-
-const signature = (list) => list.map((s) => s.id).join(',');
 
 function applyQueue(next) {
   const currentId = queue[index]?.id;
@@ -259,7 +329,7 @@ function applyQueue(next) {
   if (queue.length === 0) {
     index = 0;
     stopRotation();
-    render();
+    showEmpty();
     return;
   }
 
@@ -268,7 +338,7 @@ function applyQueue(next) {
   index = stillThere === -1 ? 0 : stillThere;
 
   if (wasEmpty || stillThere === -1) {
-    render();
+    show(index, { instant: wasEmpty });
     startRotation();
   } else {
     updateCounter();
@@ -292,12 +362,8 @@ function stopRotation() {
 
 function advance() {
   index = (index + 1) % queue.length;
-  el.frame.classList.add('is-fading');
-  setTimeout(() => {
-    render();
-    el.frame.classList.remove('is-fading');
-    restartProgress();
-  }, FADE_MS);
+  show(index);
+  restartProgress();
 }
 
 function restartProgress() {
@@ -312,31 +378,42 @@ function restartProgress() {
 
 /* ---- render ---- */
 
-function render() {
-  const item = queue[index];
-
-  if (!item) {
-    el.frame.classList.add('hidden');
-    el.placeholder.classList.remove('hidden');
-    el.counter.textContent = '';
-    return;
-  }
+/**
+ * Paints a photo into the back layer and crossfades it forward, so the
+ * outgoing and incoming photos overlap instead of dipping through an empty
+ * stage. `instant` skips the fade for the very first photo.
+ */
+function show(i, { instant = false } = {}) {
+  const item = queue[i];
+  if (!item) return showEmpty();
 
   el.placeholder.classList.add('hidden');
-  el.frame.classList.remove('hidden');
-  el.photo.src = item.url;
-  el.photo.alt = `Selfie from ${item.name}`;
-  el.name.textContent = item.name;
-  el.message.textContent = item.message || '';
-  el.message.style.display = item.message ? '' : 'none';
+  el.deck.classList.remove('hidden');
+
+  const back = instant ? layers[front] : layers[1 - front];
+  back.photo.src = item.url;
+  back.photo.alt = `Selfie from ${item.name}`;
+  back.name.textContent = item.name;
+  back.message.textContent = item.message || '';
+  back.message.style.display = item.message ? '' : 'none';
+
+  if (!instant) front = 1 - front;
+  layers.forEach((l, n) => l.root.classList.toggle('is-front', n === front));
   updateCounter();
+}
+
+function showEmpty() {
+  el.deck.classList.add('hidden');
+  layers.forEach((l) => l.root.classList.remove('is-front'));
+  el.placeholder.classList.remove('hidden');
+  el.counter.textContent = '';
 }
 
 function updateCounter() {
   el.counter.textContent = queue.length ? `${index + 1} of ${queue.length} on the wall` : '';
 }
 
-render();
+showEmpty();
 poll();
 setInterval(poll, POLL_MS);
 </script>

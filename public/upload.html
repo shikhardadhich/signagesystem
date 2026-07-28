@@ -11,7 +11,9 @@
       radial-gradient(ellipse at 50% -10%, #543421 0%, transparent 55%),
       linear-gradient(180deg, var(--coffee) 0%, var(--espresso) 100%);
     min-height: 100vh;
-    padding: 1.25rem 1rem 3rem;
+    padding:
+      calc(var(--s5) + env(safe-area-inset-top)) calc(var(--s4) + env(safe-area-inset-right))
+      calc(var(--s6) + env(safe-area-inset-bottom)) calc(var(--s4) + env(safe-area-inset-left));
     color: var(--cream);
   }
 
@@ -92,6 +94,17 @@
     color: rgba(247, 239, 225, 0.55);
     text-align: right;
     margin: 0.35rem 0 0;
+    transition: color var(--fast) var(--ease);
+  }
+
+  /* Warns before the maxlength silently swallows keystrokes. */
+  .counter.is-near {
+    color: var(--gold-light);
+  }
+
+  .counter.is-full {
+    color: #f0a08c;
+    font-weight: 600;
   }
 
   /* Big tappable file picker; the real input is hidden behind it. */
@@ -103,6 +116,17 @@
     border-radius: 12px;
     background: rgba(201, 151, 63, 0.08);
     cursor: pointer;
+    transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease);
+  }
+
+  .picker:hover {
+    background: rgba(201, 151, 63, 0.14);
+  }
+
+  .picker.has-file {
+    border-style: solid;
+    border-color: var(--gold);
+    background: rgba(201, 151, 63, 0.18);
   }
 
   .picker span {
@@ -127,8 +151,14 @@
   }
 
   .preview {
-    margin-top: 1.4rem;
+    margin-top: var(--s5);
     text-align: center;
+    animation: rise var(--slow) var(--ease) both;
+  }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: none; }
   }
 
   .preview__label {
@@ -165,6 +195,7 @@
 
   .done {
     text-align: center;
+    animation: rise var(--slow) var(--ease) both;
   }
 
   .done__badge {
@@ -258,7 +289,7 @@
     </div>
 
     <button type="submit" class="btn btn--primary" id="submit">Send it to the wall</button>
-    <p class="error hidden" id="error"></p>
+    <p class="error hidden" id="error" role="alert"></p>
   </form>
 
   <!-- ---------- confirmation ---------- -->
@@ -290,7 +321,10 @@ $('name').addEventListener('input', (e) => {
 
 $('message').addEventListener('input', (e) => {
   const value = e.target.value;
+  const counter = $('msg-count').parentElement;
   $('msg-count').textContent = value.length;
+  counter.classList.toggle('is-near', value.length >= 80 && value.length < 100);
+  counter.classList.toggle('is-full', value.length >= 100);
   $('preview-message').textContent = value.trim();
   $('preview-message').style.display = value.trim() ? '' : 'none';
 });
@@ -299,6 +333,7 @@ $('photo').addEventListener('change', (e) => {
   const file = e.target.files[0];
   if (!file) return;
   $('picker-text').textContent = `📷 ${file.name}`;
+  document.querySelector('.picker').classList.add('has-file');
   $('preview-photo').src = URL.createObjectURL(file);
   $('preview').classList.remove('hidden');
   $('preview-name').textContent = $('name').value.trim() || 'Your name';
@@ -310,7 +345,7 @@ form.addEventListener('submit', async (e) => {
   e.preventDefault();
   $('error').classList.add('hidden');
   $('submit').disabled = true;
-  $('submit').textContent = 'Sending…';
+  $('submit').innerHTML = '<span class="spinner"></span>Sending…';
 
   try {
     const res = await fetch('/api/upload', { method: 'POST', body: new FormData(form) });

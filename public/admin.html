@@ -87,6 +87,55 @@
     padding: 0.2rem 0.6rem;
   }
 
+  /* ---- filter tabs ---- */
+
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2);
+    margin: 0 0 var(--s4);
+  }
+
+  .tab {
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.5rem 0.9rem;
+    border: 1px solid var(--cream-deep);
+    border-radius: var(--r-pill);
+    background: #fff;
+    color: var(--mocha);
+    cursor: pointer;
+    transition: background var(--fast) var(--ease), color var(--fast) var(--ease),
+      border-color var(--fast) var(--ease);
+  }
+
+  .tab:hover {
+    border-color: var(--gold);
+  }
+
+  .tab[aria-selected="true"] {
+    background: var(--coffee);
+    border-color: var(--coffee);
+    color: var(--cream);
+  }
+
+  .tab__n {
+    font-size: 0.72rem;
+    padding: 0.1rem 0.45rem;
+    border-radius: var(--r-pill);
+    background: var(--cream-deep);
+    color: var(--coffee);
+  }
+
+  .tab[aria-selected="true"] .tab__n {
+    background: var(--gold);
+    color: var(--espresso);
+  }
+
   /* ---- submission rows ---- */
 
   .row {
@@ -99,7 +148,33 @@
     border-radius: 12px;
     padding: 0.85rem;
     margin-bottom: 0.85rem;
-    box-shadow: 0 2px 6px rgba(59, 36, 21, 0.06);
+    box-shadow: var(--shadow-card);
+    transition: box-shadow var(--fast) var(--ease), transform var(--fast) var(--ease);
+  }
+
+  .row:hover {
+    box-shadow: var(--shadow-lift);
+  }
+
+  /* Fades a row out the moment it is filtered away by a decision. */
+  .row.is-leaving {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+
+  @media (max-width: 560px) {
+    .row {
+      flex-wrap: wrap;
+    }
+
+    .actions {
+      flex-direction: row;
+      width: 100%;
+    }
+
+    .actions .btn {
+      flex: 1;
+    }
   }
 
   .row[data-status="pending"]  { border-left-color: var(--gold); }
@@ -175,9 +250,9 @@
   .queue {
     background: #fff;
     border: 1px solid var(--cream-deep);
-    border-radius: 12px;
+    border-radius: var(--r-md);
     padding: 1rem;
-    box-shadow: 0 2px 6px rgba(59, 36, 21, 0.06);
+    box-shadow: var(--shadow-card);
     position: sticky;
     top: 1.5rem;
   }
@@ -254,7 +329,8 @@
 <main>
   <section>
     <h2>Submissions <span class="count" id="sub-count">0</span></h2>
-    <div id="list"></div>
+    <div class="tabs" role="tablist" id="tabs"></div>
+    <div id="list" aria-live="polite"></div>
   </section>
 
   <aside class="queue">
@@ -268,30 +344,91 @@
 const POLL_MS = 3000;
 const $ = (id) => document.getElementById(id);
 
+const FILTERS = [
+  { key: 'pending', label: 'Needs review' },
+  { key: 'approved', label: 'Approved' },
+  { key: 'rejected', label: 'Rejected' },
+  { key: 'all', label: 'All' },
+];
+
+let filter = 'pending';
+let submissions = [];
+/* Ids the moderator just decided on, so a click updates instantly instead of
+   waiting up to 3s for the next poll to catch up. */
+const pendingDecisions = new Map();
+
 async function refresh() {
   try {
-    const [submissions, queue] = await Promise.all([
+    const [subs, queue] = await Promise.all([
       fetch('/api/submissions').then((r) => r.json()),
       fetch('/api/queue').then((r) => r.json()),
     ]);
-    renderSubmissions(submissions);
+    // Drop optimistic entries the server has now confirmed.
+    for (const s of subs) {
+      if (pendingDecisions.get(s.id) === s.status) pendingDecisions.delete(s.id);
+    }
+    submissions = subs.map((s) =>
+      pendingDecisions.has(s.id) ? { ...s, status: pendingDecisions.get(s.id) } : s
+    );
+    render();
     renderQueue(queue);
   } catch (err) {
     /* Leave the last good render on screen and retry next tick. */
   }
 }
 
-function renderSubmissions(items) {
-  $('sub-count').textContent = items.length;
-  const list = $('list');
+function counts() {
+  const n = { all: submissions.length, pending: 0, approved: 0, rejected: 0 };
+  for (const s of submissions) n[s.status] = (n[s.status] || 0) + 1;
+  return n;
+}
 
-  if (!items.length) {
-    list.innerHTML = '<p class="empty">No submissions yet — open the upload page and send one through.</p>';
+function render() {
+  renderTabs();
+  renderSubmissions();
+}
+
+function renderTabs() {
+  const n = counts();
+  const tabs = $('tabs');
+  tabs.innerHTML = '';
+  for (const f of FILTERS) {
+    const btn = document.createElement('button');
+    btn.className = 'tab';
+    btn.type = 'button';
+    btn.setAttribute('role', 'tab');
+    btn.setAttribute('aria-selected', String(f.key === filter));
+    btn.append(f.label);
+    const badge = document.createElement('span');
+    badge.className = 'tab__n';
+    badge.textContent = n[f.key] || 0;
+    btn.append(badge);
+    btn.addEventListener('click', () => { filter = f.key; render(); });
+    tabs.append(btn);
+  }
+}
+
+function renderSubmissions() {
+  $('sub-count').textContent = submissions.length;
+  const list = $('list');
+  const shown = submissions.filter((s) => filter === 'all' || s.status === filter);
+
+  if (!shown.length) {
+    const EMPTY = {
+      pending: 'All caught up — nothing waiting for review.',
+      approved: 'Nothing approved yet.',
+      rejected: 'Nothing rejected.',
+      all: 'No submissions yet — open the upload page and send one through.',
+    };
+    const p = document.createElement('p');
+    p.className = 'empty';
+    p.textContent = submissions.length ? EMPTY[filter] : EMPTY.all;
+    list.replaceChildren(p);
     return;
   }
 
   list.innerHTML = '';
-  for (const item of items) {
+  for (const item of shown) {
     const row = document.createElement('div');
     row.className = 'row';
     row.dataset.status = item.status;
@@ -299,6 +436,7 @@ function renderSubmissions(items) {
     const thumb = document.createElement('img');
     thumb.className = 'thumb';
     thumb.src = item.url;
+    thumb.loading = 'lazy';
     thumb.alt = `Selfie from ${item.name}`;
 
     const meta = document.createElement('div');
@@ -337,6 +475,7 @@ function renderSubmissions(items) {
 function button(label, variant, onClick) {
   const btn = document.createElement('button');
   btn.className = `btn ${variant}`;
+  btn.type = 'button';
   btn.textContent = label;
   btn.addEventListener('click', onClick);
   return btn;
@@ -352,6 +491,7 @@ function renderQueue(queue) {
     const li = document.createElement('li');
     const img = document.createElement('img');
     img.src = item.url;
+    img.loading = 'lazy';
     img.alt = '';
     const span = document.createElement('span');
     span.textContent = item.name;
@@ -361,7 +501,18 @@ function renderQueue(queue) {
 }
 
 async function decide(id, action) {
-  await fetch(`/api/submissions/${id}/${action}`, { method: 'POST' });
+  const status = action === 'approve' ? 'approved' : 'rejected';
+  // Reflect the decision immediately, then reconcile with the server.
+  pendingDecisions.set(id, status);
+  const target = submissions.find((s) => s.id === id);
+  if (target) target.status = status;
+  render();
+
+  try {
+    await fetch(`/api/submissions/${id}/${action}`, { method: 'POST' });
+  } catch (err) {
+    pendingDecisions.delete(id);
+  }
   refresh();
 }
 

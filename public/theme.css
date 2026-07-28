@@ -16,6 +16,27 @@
 
   --serif: "Georgia", "Times New Roman", serif;
   --sans: "Avenir Next", "Segoe UI", system-ui, -apple-system, sans-serif;
+
+  /* Spacing scale — every gap on the phone and admin pages is one of these,
+     so vertical rhythm stays consistent across the three pages. */
+  --s1: 0.25rem;
+  --s2: 0.5rem;
+  --s3: 0.75rem;
+  --s4: 1rem;
+  --s5: 1.5rem;
+  --s6: 2rem;
+
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-pill: 999px;
+
+  --shadow-card: 0 1px 2px rgba(59, 36, 21, 0.06), 0 4px 12px rgba(59, 36, 21, 0.08);
+  --shadow-lift: 0 2px 4px rgba(59, 36, 21, 0.08), 0 10px 24px rgba(59, 36, 21, 0.14);
+
+  --ease: cubic-bezier(0.2, 0.8, 0.3, 1);
+  --fast: 120ms;
+  --slow: 320ms;
 }
 
 * {
@@ -27,10 +48,32 @@ body {
   font-family: var(--sans);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 .hidden {
   display: none !important;
+}
+
+/* One visible focus treatment for every interactive element, on both the dark
+   and light pages. Mouse clicks don't trigger it; keyboard navigation does. */
+:focus-visible {
+  outline: 3px solid var(--gold);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* The display screen animates on a timer nobody asked for, so honour the OS
+   setting: transitions collapse and the rotation becomes an instant cut. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* ---- The branded photo template, shared by the screen and the phone preview.
@@ -105,7 +148,13 @@ body {
   line-height: 1.15;
   color: var(--coffee);
   margin: 0;
-  word-break: break-word;
+  /* Long single-word names wrap instead of pushing through the frame; the
+     clamp stops a pathological entry from unbalancing the mount. */
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 .template__message {
@@ -115,7 +164,11 @@ body {
   line-height: 1.35;
   color: var(--mocha);
   margin: calc(8 * var(--u)) 0 0;
-  word-break: break-word;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
 }
 
 /* ---- Shared controls ---- */
@@ -124,25 +177,34 @@ body {
   font-family: var(--sans);
   font-size: 1rem;
   font-weight: 600;
+  line-height: 1.2;
   border: none;
-  border-radius: 10px;
+  border-radius: var(--r-sm);
   padding: 0.85rem 1.4rem;
   cursor: pointer;
-  transition: transform 0.12s ease, opacity 0.12s ease;
+  /* Comfortably tappable on a phone without a stylus. */
+  min-height: 44px;
+  transition: transform var(--fast) var(--ease), filter var(--fast) var(--ease),
+    box-shadow var(--fast) var(--ease);
 }
 
-.btn:active {
-  transform: scale(0.97);
+.btn:hover:not(:disabled) {
+  filter: brightness(1.07);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px) scale(0.985);
 }
 
 .btn:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
 .btn--primary {
   background: linear-gradient(180deg, var(--gold) 0%, var(--caramel) 100%);
   color: #fff;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.18), var(--shadow-card);
 }
 
 .btn--approve {
@@ -153,4 +215,21 @@ body {
 .btn--reject {
   background: var(--bad);
   color: #fff;
+}
+
+/* Spinner shown inside a button while its request is in flight. */
+.spinner {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin-right: 0.55em;
+  vertical-align: -0.125em;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
