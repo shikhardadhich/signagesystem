@@ -143,6 +143,10 @@
     font-size: 0.8rem;
   }
 
+  .picker .shrunk {
+    color: var(--gold-light);
+  }
+
   input[type="file"] {
     position: absolute;
     width: 1px;
@@ -273,7 +277,7 @@
     <div class="field">
       <label class="picker" for="photo">
         <span id="picker-text">📷 Tap to take or choose a photo</span>
-        <small>JPG, PNG or WEBP · up to 12&nbsp;MB</small>
+        <small id="picker-note">JPG, PNG or WEBP · up to 12&nbsp;MB</small>
       </label>
       <input id="photo" name="photo" type="file" accept="image/*" capture="user" required>
     </div>
@@ -329,14 +333,59 @@ $('message').addEventListener('input', (e) => {
   $('preview-message').style.display = value.trim() ? '' : 'none';
 });
 
-$('photo').addEventListener('change', (e) => {
+/* ---- image shrinking ----
+   A modern phone camera produces 3-6 MB, while the photo occupies at most about
+   900px on a 4K panel. Downscaling here rather than on the server saves the
+   upload over cafe wifi as well as the storage and bandwidth behind it. */
+
+const MAX_EDGE = 1600;
+const JPEG_QUALITY = 0.82;
+
+/** The processed file to submit, or null to fall back to the original input. */
+let prepared = null;
+
+const kb = (n) => (n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`);
+
+async function shrink(file) {
+  // imageOrientation honours EXIF, so portrait phone shots aren't rotated.
+  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
+  const w = Math.round(bitmap.width * scale);
+  const h = Math.round(bitmap.height * scale);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  canvas.getContext('2d').drawImage(bitmap, 0, 0, w, h);
+  bitmap.close?.();
+
+  const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', JPEG_QUALITY));
+  if (!blob || blob.size >= file.size) return null;   // already small enough
+  return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+}
+
+$('photo').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
-  $('picker-text').textContent = `📷 ${file.name}`;
+
   document.querySelector('.picker').classList.add('has-file');
-  $('preview-photo').src = URL.createObjectURL(file);
+  $('picker-text').textContent = `📷 ${file.name}`;
+  $('picker-note').textContent = 'Preparing…';
   $('preview').classList.remove('hidden');
   $('preview-name').textContent = $('name').value.trim() || 'Your name';
+
+  prepared = null;
+  try {
+    prepared = await shrink(file);
+  } catch (err) {
+    // Unsupported format or a browser without createImageBitmap: send as-is.
+  }
+
+  const used = prepared || file;
+  $('preview-photo').src = URL.createObjectURL(used);
+  $('picker-note').innerHTML = prepared
+    ? `<span class="shrunk">${kb(file.size)} → ${kb(prepared.size)}</span>`
+    : kb(file.size);
 });
 
 /* ---- submit ---- */
@@ -348,7 +397,10 @@ form.addEventListener('submit', async (e) => {
   $('submit').innerHTML = '<span class="spinner"></span>Sending…';
 
   try {
-    const res = await fetch('/api/upload', { method: 'POST', body: new FormData(form) });
+    const body = new FormData(form);
+    // Submit the downscaled copy rather than what came off the camera.
+    if (prepared) body.set('photo', prepared, prepared.name);
+    const res = await fetch('/api/upload', { method: 'POST', body });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Upload failed');
 

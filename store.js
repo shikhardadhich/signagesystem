@@ -3,6 +3,8 @@
  *
  *   local    — images on disk in uploads/, records in a module-level array.
  *              Zero setup: this is what `npm start` uses on a laptop.
+ *   supabase — images in Storage, records in Postgres. Preferred when hosted:
+ *              a poll is one query rather than one read per photo.
  *   firebase — images in Cloud Storage, records in Firestore.
  *   vercel   — images in Vercel Blob, records in Redis.
  *
@@ -19,6 +21,9 @@ const path = require('path');
 
 const UPLOAD_DIR = path.join(__dirname, 'uploads');
 
+const hasSupabase = Boolean(
+  process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY)
+);
 const hasFirebase = Boolean(
   process.env.FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_CONFIG || process.env.GCLOUD_PROJECT
 );
@@ -28,7 +33,8 @@ const hasRedis = Boolean(process.env.KV_REST_API_URL && process.env.KV_REST_API_
 const hasVercel = hasBlob;
 
 const forced = process.env.STORAGE_DRIVER;
-const chosen = forced || (hasFirebase ? 'firebase' : hasVercel ? 'vercel' : 'local');
+const chosen =
+  forced || (hasSupabase ? 'supabase' : hasFirebase ? 'firebase' : hasVercel ? 'vercel' : 'local');
 
 function makeId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -214,6 +220,110 @@ function firebaseDriver() {
       await batch.commit();
       await bucket.deleteFiles({ prefix: 'selfies/' });
       return { removed: snap.size };
+    },
+  };
+}
+
+/* ------------------------------------------------------------ supabase -- */
+
+/**
+ * Postgres for the queue, Storage for the photos.
+ *
+ * Preferred for a wall that polls: a poll is one SELECT rather than one read
+ * per photo, so cost does not scale with how many selfies are on the wall —
+ * which is what made the metered object stores expensive here.
+ */
+function supabaseDriver() {
+  const { createClient } = require('@supabase/supabase-js');
+
+  const db = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY,
+    { auth: { persistSession: false } }
+  );
+
+  const TABLE = process.env.SUPABASE_TABLE || 'submissions';
+  const BUCKET = process.env.SUPABASE_BUCKET || 'selfies';
+  const WALL_ID = 'wall';
+
+  const check = ({ data, error }) => {
+    if (error) throw new Error(`Supabase: ${error.message}`);
+    return data;
+  };
+
+  // Postgres columns are snake_case; the rest of the app speaks camelCase.
+  const toRow = (s) => ({
+    id: s.id,
+    name: s.name,
+    message: s.message,
+    url: s.url,
+    path: s.path || null,
+    status: s.status,
+    submitted_at: s.submittedAt,
+    decided_at: s.decidedAt,
+  });
+  const fromRow = (r) =>
+    r && {
+      id: r.id,
+      name: r.name,
+      message: r.message || '',
+      url: r.url,
+      path: r.path || undefined,
+      status: r.status,
+      submittedAt: Number(r.submitted_at),
+      decidedAt: r.decided_at === null ? null : Number(r.decided_at),
+    };
+
+  return {
+    name: 'supabase',
+    async getWall() {
+      const { data, error } = await db.from('settings').select('value').eq('id', WALL_ID).maybeSingle();
+      if (error) throw new Error(`Supabase: ${error.message}`);
+      return data ? { ...DEFAULT_WALL, ...data.value } : { ...DEFAULT_WALL };
+    },
+    async setWall(mode) {
+      const wall = nextWall(mode);
+      check(await db.from('settings').upsert({ id: WALL_ID, value: wall }));
+      return wall;
+    },
+    async add(name, message, file) {
+      const submission = newSubmission(name, message);
+      submission.path = `${submission.id}${extensionFor(file)}`;
+
+      check(
+        await db.storage.from(BUCKET).upload(submission.path, file.buffer, {
+          contentType: file.mimetype,
+          upsert: false,
+        })
+      );
+      submission.url = db.storage.from(BUCKET).getPublicUrl(submission.path).data.publicUrl;
+
+      check(await db.from(TABLE).insert(toRow(submission)));
+      return submission;
+    },
+    async list() {
+      const rows = check(await db.from(TABLE).select('*').order('submitted_at', { ascending: true }));
+      return rows.map(fromRow);
+    },
+    async get(id) {
+      const { data, error } = await db.from(TABLE).select('*').eq('id', id).maybeSingle();
+      if (error) throw new Error(`Supabase: ${error.message}`);
+      return fromRow(data) || null;
+    },
+    async setStatus(id, status) {
+      const rows = check(
+        await db.from(TABLE).update({ status, decided_at: Date.now() }).eq('id', id).select()
+      );
+      return rows.length ? fromRow(rows[0]) : null;
+    },
+    async clear() {
+      const rows = check(await db.from(TABLE).select('path'));
+      // Rows first: an orphaned image is invisible, an orphaned row renders as
+      // a broken photo on the wall.
+      check(await db.from(TABLE).delete().neq('id', ''));
+      const paths = rows.map((r) => r.path).filter(Boolean);
+      if (paths.length) check(await db.storage.from(BUCKET).remove(paths));
+      return { removed: rows.length };
     },
   };
 }
@@ -425,10 +535,17 @@ function vercelDriver() {
   };
 }
 
-const DRIVERS = { local: localDriver, firebase: firebaseDriver, vercel: vercelDriver };
+const DRIVERS = {
+  local: localDriver,
+  supabase: supabaseDriver,
+  firebase: firebaseDriver,
+  vercel: vercelDriver,
+};
 
 if (!DRIVERS[chosen]) {
-  throw new Error(`Unknown STORAGE_DRIVER "${chosen}" (expected local, firebase or vercel)`);
+  throw new Error(
+    `Unknown STORAGE_DRIVER "${chosen}" (expected local, supabase, firebase or vercel)`
+  );
 }
 
 const store = DRIVERS[chosen]();
@@ -439,6 +556,7 @@ const store = DRIVERS[chosen]();
  * most likely reason an upload fails.
  */
 store.describe = () => {
+  if (store.name === 'supabase') return 'supabase (Postgres + Storage)';
   if (store.name === 'firebase') return 'firebase (Cloud Storage + Firestore)';
   if (store.name === 'vercel') {
     return hasRedis ? 'vercel (Blob + Redis)' : 'vercel (Blob only)';

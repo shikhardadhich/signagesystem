@@ -32,16 +32,19 @@ That URL is what gets encoded into the QR code and printed at startup.
 
 The POC's original storage model — files on disk, queue in a local array — does
 not survive a serverless runtime: the filesystem is read-only and each request
-may hit a different instance. So `store.js` ships three interchangeable drivers
+may hit a different instance. So `store.js` ships four interchangeable drivers
 and picks one from the environment:
 
 | Driver | Selected when | Images | Queue |
 | --- | --- | --- | --- |
 | `local` | no cloud env vars (i.e. `npm start`) | `uploads/` on disk | in-memory array |
+| `supabase` | `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` present | Storage bucket | Postgres |
 | `firebase` | `FIREBASE_CONFIG` / `GCLOUD_PROJECT` present (set automatically in Cloud Functions) | Cloud Storage | Firestore |
 | `vercel` | `BLOB_READ_WRITE_TOKEN` present | Vercel Blob | Redis if configured, else one JSON blob per submission |
 
-`STORAGE_DRIVER=local|firebase|vercel` forces one. Nothing to configure locally —
+When more than one is configured the order above wins, so adding Supabase to a
+project that still has a Blob store switches it over.
+`STORAGE_DRIVER=local|supabase|firebase|vercel` forces one. Nothing to configure locally —
 the local driver stays the default, so `npm start` still needs no cloud account.
 
 `GET /api/health` reports which driver is live:
@@ -49,6 +52,29 @@ the local driver stays the default, so `npm start` still needs no cloud account.
 ```json
 { "ok": true, "storage": "firebase (Cloud Storage + Firestore)", "cloud": true }
 ```
+
+### Supabase (recommended when hosted)
+
+Object stores that bill per operation suit a polling wall badly: the screen and
+the admin page ask "what's on the wall?" every few seconds forever, and with a
+per-photo read that cost grows with the wall. Postgres answers the same question
+in **one query no matter how many photos there are**, which is why this is the
+default recommendation. It also covers both halves — queue and images — in one
+service.
+
+1. Create a project at supabase.com.
+2. Open the **SQL Editor**, paste [`supabase.sql`](supabase.sql) and run it. That
+   creates the two tables and a public `selfies` storage bucket.
+3. Set two environment variables on the host (Vercel → Settings → Environment
+   Variables), from *Project Settings → API*:
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+4. Redeploy.
+
+The service-role key must stay server-side — it bypasses row-level security, and
+the browser never sees it. RLS is enabled with no policies, so the anon key grants
+nothing while the server keeps working. `SUPABASE_BUCKET` and `SUPABASE_TABLE`
+override the names if you want something other than `selfies` / `submissions`.
 
 ### Firebase
 
@@ -75,7 +101,13 @@ function's Admin SDK, and browsers never talk to either service directly.
 To override the bucket (for example when it isn't the project default), set
 `FIREBASE_STORAGE_BUCKET`.
 
-### Vercel
+### Vercel Blob
+
+Works, but bills per operation, which a polling wall burns through quickly — see
+*Supabase* above. If you use it anyway, the notes below still apply; the driver
+caches aggressively to keep the operation count down.
+
+### Vercel (hosting)
 
 Hosting serves `public/` and rewrites the rest to the Express app in
 `api/index.js`.
@@ -122,7 +154,7 @@ no configuration.
 - **Storage is deliberately throwaway locally.** Submissions live in an in-memory
   array and images land in `uploads/`, so restarting the server empties the wall.
   There is no auth and no automated moderation. See *Deploying* above for the
-  Firebase and Vercel drivers that replace this when hosted.
+  hosted drivers that replace this.
 - **Everything is polling, every 5-6 seconds.** The screen polls `/api/queue`, the
   admin page polls `/api/submissions`, and the phone polls `/api/status/:id` after
   submitting. No WebSockets to keep the moving parts down.
@@ -155,6 +187,13 @@ no configuration.
   its next poll and it survives a refresh or a cold start. The screen carries the
   same control, hidden until someone moves the mouse or presses a key (`L` toggles)
   so the kiosk stays clean.
+- **Photos are shrunk on the phone before upload.** A modern camera hands over
+  3-6 MB while the photo occupies at most about 900px even on a 4K panel, so the
+  browser downscales to a 1600px long edge and re-encodes as JPEG — a 3.2 MB shot
+  becomes about 550 KB. Doing it client-side saves the upload over cafe wifi as
+  well as the storage and bandwidth behind it, and EXIF orientation is honoured so
+  portrait shots don't end up sideways. If the browser can't do it, the original
+  is sent unchanged.
 - **Clearing the wall is a two-click action.** *Clear all photos* in the admin
   sidebar arms first and deletes on the second click, disarming itself after 5s.
   It removes the stored images too, not just the records — on every driver. The
@@ -188,7 +227,8 @@ never leaves anything behind.
 
 ```
 server.js          Express app and routes (exports the app; listens only via npm start)
-store.js           storage drivers: local disk, Firebase, or Vercel
+store.js           storage drivers: local disk, Supabase, Firebase, or Vercel Blob
+supabase.sql       Supabase schema — run once in the SQL Editor
 index.js           Firebase Cloud Functions entry point
 firebase.json      Firebase Hosting rewrites + functions config
 storage.rules      denies direct client access to Cloud Storage
