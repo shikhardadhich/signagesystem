@@ -214,8 +214,20 @@ function publicBase(req) {
 /* --------------------------------------------------------------- errors -- */
 
 app.use((err, req, res, next) => {
+  const message = err.message || 'Something went wrong';
+
+  // A suspended or over-quota store surfaces as a provider error that means
+  // nothing to a customer holding a phone. Say what actually happened.
+  if (/suspend|quota|limit exceeded|payment/i.test(message)) {
+    return res.status(503).json({
+      error: 'The photo store is unavailable right now, so this photo could not be saved. ' +
+        'Please try again later.',
+      detail: message,
+    });
+  }
+
   const status = err.status || (err.code === 'LIMIT_FILE_SIZE' ? 413 : 400);
-  res.status(status).json({ error: err.message || 'Something went wrong' });
+  res.status(status).json({ error: message });
 });
 
 if (require.main === module) {

@@ -123,9 +123,17 @@ no configuration.
   array and images land in `uploads/`, so restarting the server empties the wall.
   There is no auth and no automated moderation. See *Deploying* above for the
   Firebase and Vercel drivers that replace this when hosted.
-- **Everything is polling, every 3 seconds.** The screen polls `/api/queue`, the
+- **Everything is polling, every 5-6 seconds.** The screen polls `/api/queue`, the
   admin page polls `/api/submissions`, and the phone polls `/api/status/:id` after
   submitting. No WebSockets to keep the moving parts down.
+- **Polling is metered when hosted, so reads are cached.** Re-reading every record
+  on every tick is what makes a Blob store expensive — at a 3s poll a ten-photo
+  wall cost 1 + 10 origin reads per client per tick, hundreds of thousands of
+  operations a day. `list()` reports each blob's `uploadedAt` and `size`, so a
+  record is only re-read once it has actually changed, and the whole list is held
+  briefly so two clients polling out of phase cost one read between them. Steady
+  state is about 0.5 operations per poll instead of 11. Every mutation drops the
+  cache, so a decision is still visible on the very next poll.
 - **The screen rotates every 8 seconds** with a fade, and holds its place when the
   queue changes underneath it rather than jumping back to the first photo.
 - **A photo and its caption always appear together.** The incoming photo and text

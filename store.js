@@ -281,9 +281,36 @@ function vercelDriver() {
     }
   }
 
+  /* Reading every record on every poll is what made this driver expensive: at a
+     3s poll a ten-photo wall issued 1 + 10 origin reads per client per tick,
+     which is hundreds of thousands of Blob operations a day and enough to get a
+     store suspended. list() already reports uploadedAt and size, so a record is
+     only re-read when it has actually changed. Steady state is one list call. */
+  const recordCache = new Map();
+  let listCache = { at: 0, value: null };
+  // Just under the client poll interval, so two clients polling out of phase
+  // cost one list between them rather than two.
+  const LIST_TTL = 5000;
+
+  function invalidate() {
+    listCache = { at: 0, value: null };
+  }
+
   async function readMeta(prefix) {
     const { blobs } = await list({ prefix });
-    const records = await Promise.all(blobs.map((b) => readBlobJson(b.pathname)));
+    const records = await Promise.all(
+      blobs.map(async (b) => {
+        const stamp = `${new Date(b.uploadedAt).getTime()}:${b.size}`;
+        const hit = recordCache.get(b.pathname);
+        if (hit && hit.stamp === stamp) return hit.record;
+        const record = await readBlobJson(b.pathname);
+        if (record) recordCache.set(b.pathname, { stamp, record });
+        return record;
+      })
+    );
+    // Forget records whose blob has gone, so the map can't grow without bound.
+    const live = new Set(blobs.map((b) => b.pathname));
+    for (const k of [...recordCache.keys()]) if (!live.has(k)) recordCache.delete(k);
     return records.filter(Boolean);
   }
 
@@ -331,11 +358,19 @@ function vercelDriver() {
         await redis.rpush(IDS, submission.id);
       } else {
         await writeMeta(submission);
+        invalidate();
       }
       return submission;
     },
     async list() {
-      if (!redis) return readMeta(META);
+      if (!redis) {
+        // Collapses the screen's and the admin page's polls when they land
+        // together, without letting a moderation decision go stale.
+        if (listCache.value && Date.now() - listCache.at < LIST_TTL) return listCache.value;
+        const value = await readMeta(META);
+        listCache = { at: Date.now(), value };
+        return value;
+      }
       const ids = await redis.lrange(IDS, 0, -1);
       if (!ids.length) return [];
       const records = await redis.mget(...ids.map(key));
@@ -353,7 +388,10 @@ function vercelDriver() {
       // Each record owns its own key/blob, so a decision never rewrites a
       // shared index and cannot clobber a concurrent upload.
       if (redis) await redis.set(key(id), submission);
-      else await writeMeta(submission);
+      else {
+        await writeMeta(submission);
+        invalidate();
+      }
       return submission;
     },
     async clear() {
@@ -373,6 +411,8 @@ function vercelDriver() {
       const { blobs: photos } = await list({ prefix: 'selfies/' });
       if (photos.length) await del(photos.map((b) => b.pathname));
 
+      recordCache.clear();
+      invalidate();
       return { removed: records.length };
     },
     /** Streams a private blob back through the function. */
