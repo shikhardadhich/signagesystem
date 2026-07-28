@@ -89,6 +89,14 @@ Hosting serves `public/` and rewrites the rest to the Express app in
    the wall needs — each submission's record is kept as its own small JSON blob
    next to its photo.
 
+   Either kind of store works. A Blob store is created as **public** or
+   **private** and rejects the wrong access value outright, so the driver learns
+   which it is from the first write and remembers it (`BLOB_ACCESS=public|private`
+   skips the probe). On a public store browsers load photos straight from the
+   CDN. On a private store they cannot, so photos are streamed through
+   `/api/photo/:id` instead — correct either way, but a public store is faster
+   for a wall and costs fewer function invocations.
+
    Optionally also connect a **Redis** store (`KV_REST_API_URL` +
    `KV_REST_API_TOKEN`). It is picked up automatically and makes reads a single
    round trip instead of a list plus one fetch per record — worth adding if the

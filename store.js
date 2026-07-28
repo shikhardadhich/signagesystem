@@ -168,7 +168,7 @@ function firebaseDriver() {
 /* -------------------------------------------------------------- vercel -- */
 
 function vercelDriver() {
-  const { put, list } = require('@vercel/blob');
+  const { put, list, get } = require('@vercel/blob');
 
   const IDS = 'selfiewall:ids';
   const key = (id) => `selfiewall:sub:${id}`;
@@ -176,12 +176,37 @@ function vercelDriver() {
 
   // Redis is optional. With it, the queue is one round trip. Without it, each
   // submission's record is its own small JSON blob — so a Blob store alone is
-  // enough to run the wall, at the cost of a list + one fetch per record.
+  // enough to run the wall, at the cost of a list + one read per record.
   const redis = hasRedis ? require('@upstash/redis').Redis.fromEnv() : null;
 
+  // A Blob store is created as either public or private and rejects the wrong
+  // access value outright. Rather than make that a setup step, learn it from
+  // the first write and remember it. BLOB_ACCESS skips the probe.
+  let access = process.env.BLOB_ACCESS || null;
+  const mismatched = (err, mode) =>
+    new RegExp(`${mode} access on a`, 'i').test(err.message || '') ||
+    new RegExp(`configured with ${mode === 'public' ? 'private' : 'public'} access`, 'i').test(
+      err.message || ''
+    );
+
+  async function putBlob(pathname, body, opts) {
+    const order = access ? [access] : ['public', 'private'];
+    let lastErr;
+    for (const mode of order) {
+      try {
+        const blob = await put(pathname, body, { ...opts, access: mode });
+        access = mode;
+        return blob;
+      } catch (err) {
+        lastErr = err;
+        if (!mismatched(err, mode)) throw err;
+      }
+    }
+    throw lastErr;
+  }
+
   const writeMeta = (submission) =>
-    put(`${META}${submission.id}.json`, JSON.stringify(submission), {
-      access: 'public',
+    putBlob(`${META}${submission.id}.json`, JSON.stringify(submission), {
       contentType: 'application/json',
       addRandomSuffix: false,
       allowOverwrite: true,
@@ -190,31 +215,41 @@ function vercelDriver() {
       cacheControlMaxAge: 0,
     });
 
+  // Reads go through the SDK rather than fetching the public URL, so the same
+  // code works on a private store and useCache:false guarantees a moderation
+  // decision is visible on the very next poll.
+  async function readBlobJson(pathname) {
+    try {
+      const res = await get(pathname, { access: access || 'public', useCache: false });
+      if (!res || res.statusCode !== 200) return null;
+      return JSON.parse(await new Response(res.stream).text());
+    } catch (err) {
+      return null;
+    }
+  }
+
   async function readMeta(prefix) {
     const { blobs } = await list({ prefix });
-    const records = await Promise.all(
-      blobs.map(async (b) => {
-        try {
-          const res = await fetch(`${b.url}?t=${Date.now()}`, { cache: 'no-store' });
-          return res.ok ? await res.json() : null;
-        } catch (err) {
-          return null;
-        }
-      })
-    );
+    const records = await Promise.all(blobs.map((b) => readBlobJson(b.pathname)));
     return records.filter(Boolean);
   }
 
   return {
     name: 'vercel',
+    get access() {
+      return access;
+    },
     async add(name, message, file) {
       const submission = newSubmission(name, message);
-      const blob = await put(`selfies/${submission.id}${extensionFor(file)}`, file.buffer, {
-        access: 'public',
+      submission.path = `selfies/${submission.id}${extensionFor(file)}`;
+      const blob = await putBlob(submission.path, file.buffer, {
         contentType: file.mimetype,
         addRandomSuffix: false,
       });
-      submission.url = blob.url;
+      // A private blob's own URL needs credentials a browser doesn't have, so
+      // point at our proxy route instead; public blobs are served straight
+      // from the CDN.
+      submission.url = access === 'private' ? `/api/photo/${submission.id}` : blob.url;
 
       if (redis) {
         // Record first, then index — a crash between the two leaves an orphan
@@ -234,7 +269,7 @@ function vercelDriver() {
       return records.filter(Boolean);
     },
     async get(id) {
-      if (!redis) return (await readMeta(`${META}${id}.json`))[0] || null;
+      if (!redis) return (await readBlobJson(`${META}${id}.json`)) || null;
       return (await redis.get(key(id))) || null;
     },
     async setStatus(id, status) {
@@ -247,6 +282,13 @@ function vercelDriver() {
       if (redis) await redis.set(key(id), submission);
       else await writeMeta(submission);
       return submission;
+    },
+    /** Streams a private blob back through the function. */
+    async openPhoto(submission) {
+      if (!submission.path) return null;
+      const res = await get(submission.path, { access: access || 'private' });
+      if (!res || res.statusCode !== 200) return null;
+      return { stream: res.stream, contentType: res.blob.contentType, size: res.blob.size };
     },
   };
 }

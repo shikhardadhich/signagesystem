@@ -9,6 +9,7 @@
  */
 
 const path = require('path');
+const { Readable } = require('stream');
 const express = require('express');
 const multer = require('multer');
 const QRCode = require('qrcode');
@@ -126,6 +127,30 @@ app.get('/api/qr', async (req, res, next) => {
 
 app.get('/api/health', async (req, res) => {
   res.json({ ok: true, storage: store.describe(), cloud: store.isCloud });
+});
+
+/**
+ * Serves a photo held in a private Blob store, which a browser cannot fetch
+ * directly. Public stores never reach this route — their records already point
+ * at the CDN URL.
+ */
+app.get('/api/photo/:id', async (req, res, next) => {
+  try {
+    if (typeof store.openPhoto !== 'function') return res.status(404).end();
+
+    const submission = await store.get(req.params.id);
+    if (!submission) return res.status(404).json({ error: 'Not found' });
+
+    const photo = await store.openPhoto(submission);
+    if (!photo) return res.status(404).json({ error: 'Photo unavailable' });
+
+    res.setHeader('Content-Type', photo.contentType || 'image/jpeg');
+    // A given id's bytes never change, so this is safe to cache hard.
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    Readable.fromWeb(photo.stream).pipe(res);
+  } catch (err) {
+    next(err);
+  }
 });
 
 /* -------------------------------------------------------------- helpers -- */
