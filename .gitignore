@@ -5,3 +5,9 @@ uploads/*
 firebase-debug.log
 *-debug.log
 .vercel
+
+# Never commit credentials — Supabase keys and the like belong in the host's
+# environment variables, not in the repo.
+.env
+.env.*
+!.env.example

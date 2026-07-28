@@ -67,14 +67,20 @@ service.
    creates the two tables and a public `selfies` storage bucket.
 3. Set two environment variables on the host (Vercel → Settings → Environment
    Variables), from *Project Settings → API*:
-   - `SUPABASE_URL`
-   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `SUPABASE_URL` — the Project URL, `https://<ref>.supabase.co`
+   - `SUPABASE_SERVICE_ROLE_KEY` — the **secret** key (`sb_secret_…` on newer
+     projects, or the legacy `service_role` JWT). The **publishable**/anon key is
+     not used by this app and won't work here.
 4. Redeploy.
 
-The service-role key must stay server-side — it bypasses row-level security, and
-the browser never sees it. RLS is enabled with no policies, so the anon key grants
-nothing while the server keeps working. `SUPABASE_BUCKET` and `SUPABASE_TABLE`
-override the names if you want something other than `selfies` / `submissions`.
+The secret key must stay server-side — it bypasses row-level security, and the
+browser never sees it. Keep it in the host's environment variables: never in the
+repo, and never pasted into a chat or ticket. If one leaks, rotate it in
+*Project Settings → API*; the old key stops working immediately.
+
+RLS is enabled with no policies, so even the publishable key grants nothing while
+the server keeps working. `SUPABASE_BUCKET` and `SUPABASE_TABLE` override the
+names if you want something other than `selfies` / `submissions`.
 
 ### Firebase
 
