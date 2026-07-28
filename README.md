@@ -129,11 +129,19 @@ no configuration.
 - **The screen rotates every 8 seconds** with a fade, and holds its place when the
   queue changes underneath it rather than jumping back to the first photo. Upcoming
   photos are preloaded so a fade never reveals a half-loaded image.
-- **Two wall modes, switched from the admin page.** *Looping* cycles every approved
+- **The frame scales to fill the TV.** Its height depends on how far the name and
+  message wrap, so it can't be derived from the viewport alone: the screen
+  measures the laid-out frame at a known `--u` and scales from there. Every
+  dimension is a multiple of `--u`, so height is linear in it and one pass lands
+  exactly — the frame fills 97% of the stage at any resolution, and shrinks by
+  itself when a long caption would otherwise overflow.
+- **Two wall modes, switched from the admin page or the screen itself.** *Looping* cycles every approved
   photo. *Live* stops rotating and shows only photos approved after the switch, so
   the wall stands by on a "Ready for your selfie!" screen and puts each new arrival
   straight up. The mode lives in the store, not the page, so the TV picks it up on
-  its next poll and it survives a refresh or a cold start.
+  its next poll and it survives a refresh or a cold start. The screen carries the
+  same control, hidden until someone moves the mouse or presses a key (`L` toggles)
+  so the kiosk stays clean.
 - **One template, two sizes.** The branded frame in `theme.css` sizes every border,
   gap, and font off a single `--u` length, so the phone's live preview is the same
   markup as the TV — customers see exactly what will appear on the wall.

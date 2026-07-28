@@ -33,22 +33,22 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 2vh;
-    padding: 2.2vh 0 1.7vh;
+    gap: 1.6vh;
+    padding: 1.5vh 0 1.2vh;
     border-bottom: 2px solid rgba(201, 151, 63, 0.35);
     background: rgba(0, 0, 0, 0.32);
     position: relative;
   }
 
   .crest {
-    width: 8.4vh;
-    height: 8.4vh;
+    width: 6.4vh;
+    height: 6.4vh;
     flex: none;
   }
 
   .brand {
     font-family: var(--serif);
-    font-size: 4.4vh;
+    font-size: 3.7vh;
     font-weight: 700;
     letter-spacing: 0.06em;
     margin: 0;
@@ -61,8 +61,8 @@
   }
 
   .tagline {
-    margin: 0.5vh 0 0;
-    font-size: 1.8vh;
+    margin: 0.4vh 0 0;
+    font-size: 1.5vh;
     letter-spacing: 0.32em;
     text-transform: uppercase;
     color: var(--gold);
@@ -82,12 +82,15 @@
   .deck {
     display: grid;
     place-items: center;
+    /* One pixel of assets/frame.png. fitFrame() overwrites this at runtime so
+       the frame fills the stage; the calc is only a pre-measure fallback. */
+    --u: calc(1vh / 9.8);
   }
 
-  /* --u is one pixel of assets/frame.png; 1vh/9.8 makes the framed photo about
-     600px wide on a 1080p panel. */
   .layer {
-    --u: calc(1vh / 9.8);
+    /* .template declares its own --u: 1px fallback, which would shadow the
+       deck's value — take the inherited one instead. */
+    --u: inherit;
     grid-area: 1 / 1;
     opacity: 0;
     transform: scale(0.985);
@@ -184,6 +187,75 @@
     background: linear-gradient(90deg, var(--gold) 0%, var(--gold-light) 100%);
   }
 
+  /* ---- kiosk controls ----
+     Hidden during normal use and revealed by any interaction, so the wall
+     looks untouched on the TV but staff can flip modes at the screen. */
+
+  .control {
+    position: fixed;
+    top: 3vh;
+    right: 3vh;
+    display: flex;
+    align-items: center;
+    gap: 1.2vh;
+    padding: 1.2vh 1.6vh;
+    border-radius: var(--r-pill);
+    background: rgba(20, 12, 7, 0.86);
+    border: 1px solid rgba(201, 151, 63, 0.5);
+    box-shadow: 0 1vh 3vh rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    transform: translateY(-1vh);
+    pointer-events: none;
+    transition: opacity var(--slow) var(--ease), transform var(--slow) var(--ease);
+  }
+
+  .control.is-visible {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
+
+  .control__label {
+    font-size: 1.5vh;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--gold);
+  }
+
+  .control__btn {
+    font: inherit;
+    font-size: 1.6vh;
+    font-weight: 700;
+    padding: 0.9vh 1.8vh;
+    border-radius: var(--r-pill);
+    border: 1px solid rgba(201, 151, 63, 0.45);
+    background: transparent;
+    color: rgba(247, 239, 225, 0.75);
+    cursor: pointer;
+    transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+  }
+
+  .control__btn:hover:not([aria-pressed="true"]) {
+    border-color: var(--gold);
+    color: var(--cream);
+  }
+
+  .control__btn[aria-pressed="true"] {
+    background: var(--gold);
+    border-color: var(--gold);
+    color: var(--espresso);
+  }
+
+  .control__hint {
+    font-size: 1.3vh;
+    color: rgba(247, 239, 225, 0.45);
+  }
+
+  /* The cursor is noise on a TV; it comes back with any movement. */
+  body.is-idle {
+    cursor: none;
+  }
+
   /* Shown only after polling has failed repeatedly, so a blip doesn't nag but
      a genuinely dead server is visible to staff from across the room. */
   .offline {
@@ -258,6 +330,13 @@
   <p class="qr__sub" id="qr-target"></p>
 </aside>
 
+<div class="control" id="control">
+  <span class="control__label">Wall</span>
+  <button class="control__btn" type="button" data-mode="loop">Looping</button>
+  <button class="control__btn" type="button" data-mode="live">Live</button>
+  <span class="control__hint">press L</span>
+</div>
+
 <div class="counter" id="counter"></div>
 <div class="progress" id="progress"></div>
 <div class="offline hidden" id="offline"><span class="offline__dot"></span>Reconnecting</div>
@@ -277,6 +356,8 @@ const el = {
   offline: document.getElementById('offline'),
   title: document.querySelector('.placeholder__title'),
   sub: document.querySelector('.placeholder__sub'),
+  stage: document.querySelector('.stage'),
+  qr: document.querySelector('.qr'),
 };
 
 const layers = [...document.querySelectorAll('.layer')].map((root) => ({
@@ -322,6 +403,7 @@ async function poll() {
     // unchanged — otherwise going back to loop would leave rotation stopped.
     const switched = wall.mode !== lastMode;
     lastMode = wall.mode;
+    renderControl();
     if (switched) {
       queue = [];
       index = 0;
@@ -439,8 +521,38 @@ function show(i, { instant = false } = {}) {
 
   if (!instant) front = 1 - front;
   layers.forEach((l, n) => l.root.classList.toggle('is-front', n === front));
+  fitFrame();
   updateCounter();
 }
+
+/**
+ * Scales the frame to fill the stage.
+ *
+ * The frame's height depends on how far the name and message wrap, so it can't
+ * be derived from the viewport alone. Instead measure the laid-out frame at a
+ * known --u and scale from there: every dimension inside the template is a
+ * multiple of --u, so height is linear in it and one pass converges exactly.
+ */
+function fitFrame() {
+  if (el.deck.classList.contains('hidden')) return;
+  const layer = layers[front].root;
+
+  el.deck.style.setProperty('--u', '1px');
+  const h = layer.offsetHeight;
+  const w = layer.offsetWidth;
+  if (!h || !w) return;
+
+  // Keep clear of the QR card and the counter sitting in the bottom corners.
+  const availH = el.stage.clientHeight * 0.97;
+  const availW = el.stage.clientWidth - 2 * (el.qr.offsetWidth + 40);
+  el.deck.style.setProperty('--u', `${Math.min(availH / h, availW / w)}px`);
+}
+
+let resizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(fitFrame, 150);
+});
 
 function showEmpty() {
   el.deck.classList.add('hidden');
@@ -459,6 +571,60 @@ function updateCounter() {
   el.counter.textContent =
     wall.mode === 'live' ? 'Live — showing the latest photo' : `${index + 1} of ${queue.length} on the wall`;
 }
+
+/* ---- kiosk controls ---- */
+
+const IDLE_MS = 4000;
+const control = document.getElementById('control');
+let idleTimer = null;
+
+function renderControl() {
+  for (const btn of control.querySelectorAll('.control__btn')) {
+    btn.setAttribute('aria-pressed', String(btn.dataset.mode === wall.mode));
+  }
+}
+
+function wake() {
+  control.classList.add('is-visible');
+  document.body.classList.remove('is-idle');
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => {
+    control.classList.remove('is-visible');
+    document.body.classList.add('is-idle');
+  }, IDLE_MS);
+}
+
+async function setMode(mode) {
+  if (mode === wall.mode) return;
+  wall = { ...wall, mode };   // reflect the press immediately
+  renderControl();
+  try {
+    await fetch('/api/wall', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode }),
+    });
+  } catch (err) {
+    /* poll() reconciles against the server either way */
+  }
+  poll();
+}
+
+control.addEventListener('click', (e) => {
+  const btn = e.target.closest('.control__btn');
+  if (btn) setMode(btn.dataset.mode);
+});
+
+for (const evt of ['mousemove', 'touchstart', 'keydown']) {
+  window.addEventListener(evt, wake, { passive: true });
+}
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'l' || e.key === 'L') setMode(wall.mode === 'live' ? 'loop' : 'live');
+});
+
+document.body.classList.add('is-idle');
+renderControl();
 
 showEmpty();
 poll();
