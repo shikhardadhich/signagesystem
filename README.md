@@ -28,11 +28,47 @@ PUBLIC_URL=http://192.168.1.20:3000 npm start
 
 That URL is what gets encoded into the QR code and printed at startup.
 
+## Deploying to Vercel
+
+The POC's original storage model — files on disk, queue in a local array — does
+not survive a serverless runtime: the filesystem is read-only and each request
+may hit a different instance. So `store.js` ships two drivers and picks one from
+the environment:
+
+| Driver | When | Images | Queue |
+| --- | --- | --- | --- |
+| `local` | no storage env vars (i.e. `npm start`) | `uploads/` on disk | in-memory array |
+| `cloud` | both env groups present | Vercel Blob | Redis |
+
+Nothing to configure locally — the local driver stays the default. For Vercel:
+
+1. **Import the repo.** In the Vercel dashboard: *Add New → Project*, pick
+   `shikhardadhich/signagesystem`, branch `claude/cafe-selfie-wall-poc-camucx`.
+   Leave the build settings alone; `vercel.json` routes every non-static request
+   to the Express app in `api/index.js` and lets the CDN serve `public/`.
+2. **Add storage.** On the project's *Storage* tab create a **Blob** store and a
+   **Redis** store (Upstash), and connect both to the project. That injects:
+   - `BLOB_READ_WRITE_TOKEN`
+   - `KV_REST_API_URL` and `KV_REST_API_TOKEN`
+3. **Redeploy** so the function picks up the new variables.
+
+`GET /api/health` reports which driver is live:
+
+```json
+{ "ok": true, "storage": "cloud (Vercel Blob + Redis)", "cloud": true }
+```
+
+Until both stores are connected the deployment still renders all three pages,
+and uploads fail with an explicit 503 rather than a crash or a silent loss. The
+QR code encodes the request's own origin, so it points at the deployed domain
+with no configuration.
+
 ## How it works
 
-- **Storage is deliberately throwaway.** Submissions live in an in-memory array and
-  images land in `uploads/`. Restarting the server empties the wall but leaves the
-  files on disk. There is no database, no auth, and no automated moderation.
+- **Storage is deliberately throwaway locally.** Submissions live in an in-memory
+  array and images land in `uploads/`, so restarting the server empties the wall.
+  There is no auth and no automated moderation. See *Deploying to Vercel* above
+  for the Blob + Redis driver that replaces this when deployed.
 - **Everything is polling, every 3 seconds.** The screen polls `/api/queue`, the
   admin page polls `/api/submissions`, and the phone polls `/api/status/:id` after
   submitting. No WebSockets to keep the moving parts down.
@@ -54,17 +90,23 @@ That URL is what gets encoded into the QR code and printed at startup.
 | POST | `/api/submissions/:id/approve` | Mark approved |
 | POST | `/api/submissions/:id/reject` | Mark rejected |
 | GET | `/api/qr` | QR code for the upload page, as a data URL |
+| GET | `/api/health` | Which storage driver is active |
 
-Uploads are capped at 12 MB and must be images; a submission missing a name is
-rejected and its uploaded file deleted.
+Uploads are capped at 12 MB and must be images. The upload is held in memory and
+only persisted once the name and file both validate, so a rejected submission
+never leaves anything behind.
 
 ## Layout
 
 ```
-server.js          all backend logic
+server.js          Express app and routes (exports the app; listens only via npm start)
+store.js           storage drivers: disk + memory locally, Blob + Redis deployed
+api/index.js       Vercel serverless entry point
+vercel.json        routes non-static requests to the Express app
 public/theme.css   shared cafe palette + the branded photo template
 public/screen.html display screen
 public/upload.html phone upload page
 public/admin.html  moderation dashboard
-uploads/           uploaded images, served at /uploads
+public/assets/     generated frame, wall and crest artwork
+uploads/           uploaded images (local driver only), served at /uploads
 ```
