@@ -182,10 +182,14 @@ no configuration.
 - **The board is edited, not coded.** `public/menu.json` holds the cafe name,
   tagline, signature items with prices, the banner and the QR panel copy. Each
   item names an `image` (the photograph) and a `fallback`, and the screen walks
-  that chain: photo, then the line-art stand-in shipped in
-  `public/assets/menu/`, then the crest. Dropping a real photo in at the named
-  path therefore needs no config change, and a missing file can never leave a
-  blank slot on the wall.
+  that chain: photo, then a line-art stand-in, then the crest — so a missing
+  file can never leave a blank slot on the wall.
+
+  Product shots want a **transparent** background. Photographed on white they
+  sit on the cream card as a faintly visible rectangle; keying the backdrop out
+  removes the edge and lets the shot's own shadow do the work. `keymenu.js` in
+  the scratchpad did this by flood-filling from the borders, which cannot reach
+  a cream cup in the middle of the frame.
 - **A photo and its caption always appear together.** The incoming photo and text
   are staged in the hidden layer, and the crossfade only starts once the image has
   decoded — otherwise the caption lands first and the frame sits empty for a beat.
