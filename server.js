@@ -217,17 +217,20 @@ app.use((err, req, res, next) => {
   const message = err.message || 'Something went wrong';
 
   // A suspended or over-quota store surfaces as a provider error that means
-  // nothing to a customer holding a phone. Say what actually happened.
+  // nothing to a customer holding a phone. Say what actually happened, and
+  // name the active driver — without it "the photo store is unavailable" gives
+  // an operator nothing to act on.
   if (/suspend|quota|limit exceeded|payment/i.test(message)) {
     return res.status(503).json({
       error: 'The photo store is unavailable right now, so this photo could not be saved. ' +
         'Please try again later.',
+      storage: store.describe(),
       detail: message,
     });
   }
 
   const status = err.status || (err.code === 'LIMIT_FILE_SIZE' ? 413 : 400);
-  res.status(status).json({ error: message });
+  res.status(status).json({ error: message, storage: store.describe() });
 });
 
 if (require.main === module) {

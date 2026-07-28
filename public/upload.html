@@ -187,6 +187,14 @@
     padding: 1rem;
   }
 
+  .error__detail {
+    display: block;
+    margin-top: 0.5rem;
+    font-size: 0.75rem;
+    opacity: 0.75;
+    word-break: break-word;
+  }
+
   .error {
     margin: 0.9rem 0 0;
     padding: 0.7rem 0.9rem;
@@ -404,7 +412,13 @@ form.addEventListener('submit', async (e) => {
     if (prepared) body.set('photo', prepared, prepared.name);
     const res = await fetch('/api/upload', { method: 'POST', body });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Upload failed');
+    if (!res.ok) {
+      // Carry the operator-facing detail alongside the friendly message; the
+      // person debugging the wall is usually the person holding the phone.
+      const err = new Error(data.error || 'Upload failed');
+      err.detail = [data.storage, data.detail].filter(Boolean).join(' · ');
+      throw err;
+    }
 
     form.classList.add('hidden');
     $('done').classList.remove('hidden');
@@ -412,6 +426,12 @@ form.addEventListener('submit', async (e) => {
     trackStatus(data.id);
   } catch (err) {
     $('error').textContent = err.message;
+    if (err.detail) {
+      const small = document.createElement('small');
+      small.className = 'error__detail';
+      small.textContent = err.detail;
+      $('error').append(small);
+    }
     $('error').classList.remove('hidden');
     $('submit').disabled = false;
     $('submit').textContent = 'Send it to the wall';
