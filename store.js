@@ -127,6 +127,16 @@ function localDriver() {
       found.decidedAt = Date.now();
       return { ...found };
     },
+    async clear() {
+      const removed = submissions.length;
+      await Promise.all(
+        submissions.map((s) =>
+          fs.promises.unlink(path.join(UPLOAD_DIR, path.basename(s.url))).catch(() => {})
+        )
+      );
+      submissions.length = 0;
+      return { removed };
+    },
   };
 }
 
@@ -195,13 +205,23 @@ function firebaseDriver() {
       await ref.set(updated);
       return updated;
     },
+    async clear() {
+      const snap = await db.collection(COLLECTION).get();
+      // Records go first: an orphaned image is invisible, an orphaned record
+      // renders as a broken photo on the wall.
+      const batch = db.batch();
+      snap.docs.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+      await bucket.deleteFiles({ prefix: 'selfies/' });
+      return { removed: snap.size };
+    },
   };
 }
 
 /* -------------------------------------------------------------- vercel -- */
 
 function vercelDriver() {
-  const { put, list, get } = require('@vercel/blob');
+  const { put, list, get, del } = require('@vercel/blob');
 
   const IDS = 'selfiewall:ids';
   const key = (id) => `selfiewall:sub:${id}`;
@@ -335,6 +355,25 @@ function vercelDriver() {
       if (redis) await redis.set(key(id), submission);
       else await writeMeta(submission);
       return submission;
+    },
+    async clear() {
+      const records = await this.list();
+
+      if (redis) {
+        const ids = await redis.lrange(IDS, 0, -1);
+        if (ids.length) await redis.del(...ids.map(key));
+        await redis.del(IDS);
+      } else {
+        const { blobs } = await list({ prefix: META });
+        if (blobs.length) await del(blobs.map((b) => b.pathname));
+      }
+
+      // Images last: a record pointing at a deleted image would render broken,
+      // whereas an image with no record is simply unreferenced.
+      const { blobs: photos } = await list({ prefix: 'selfies/' });
+      if (photos.length) await del(photos.map((b) => b.pathname));
+
+      return { removed: records.length };
     },
     /** Streams a private blob back through the function. */
     async openPhoto(submission) {

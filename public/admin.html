@@ -295,6 +295,52 @@
     color: var(--muted);
   }
 
+  /* ---- danger zone ---- */
+
+  .danger {
+    margin-top: var(--s5);
+    padding-top: var(--s4);
+    border-top: 1px dashed var(--cream-deep);
+  }
+
+  .danger__btn {
+    width: 100%;
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 700;
+    padding: 0.65rem 0.5rem;
+    min-height: 44px;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--bad);
+    background: #fff;
+    color: var(--bad);
+    cursor: pointer;
+    transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+  }
+
+  .danger__btn:hover:not(:disabled) {
+    background: rgba(162, 69, 47, 0.08);
+  }
+
+  /* Second state: the click that actually deletes is visually distinct from
+     the one that only arms it. */
+  .danger__btn.is-armed {
+    background: var(--bad);
+    color: #fff;
+  }
+
+  .danger__btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .danger__note {
+    margin: var(--s2) 0 0;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--muted);
+  }
+
   /* ---- queue sidebar ---- */
 
   .queue {
@@ -394,6 +440,11 @@
     <h2>On the wall <span class="count" id="queue-count">0</span></h2>
     <ol id="queue"></ol>
     <p class="empty hidden" id="queue-empty">Nothing approved yet.</p>
+
+    <div class="danger">
+      <button class="danger__btn" type="button" id="clear-btn">Clear all photos</button>
+      <p class="danger__note" id="clear-note">Deletes every submission and its photo. Cannot be undone.</p>
+    </div>
   </div>
   </aside>
 </main>
@@ -618,6 +669,61 @@ async function decide(id, action) {
   }
   refresh();
 }
+
+/* ---- clear all ----
+   Two clicks: the first arms the button, the second deletes. It disarms itself
+   after 5s so a forgotten armed button can't be triggered by a stray click. */
+
+const clearBtn = $('clear-btn');
+const clearNote = $('clear-note');
+const IDLE_LABEL = 'Clear all photos';
+const IDLE_NOTE = 'Deletes every submission and its photo. Cannot be undone.';
+let armed = false;
+let armTimer = null;
+
+function disarm() {
+  clearTimeout(armTimer);
+  armed = false;
+  clearBtn.classList.remove('is-armed');
+  clearBtn.textContent = IDLE_LABEL;
+  clearNote.textContent = IDLE_NOTE;
+}
+
+clearBtn.addEventListener('click', async () => {
+  if (!armed) {
+    if (!submissions.length) {
+      clearNote.textContent = 'Nothing to clear.';
+      setTimeout(disarm, 2500);
+      return;
+    }
+    armed = true;
+    clearBtn.classList.add('is-armed');
+    clearBtn.textContent = `Delete ${submissions.length} photo${submissions.length === 1 ? '' : 's'}?`;
+    clearNote.textContent = 'Click again to confirm. This cannot be undone.';
+    armTimer = setTimeout(disarm, 5000);
+    return;
+  }
+
+  clearTimeout(armTimer);
+  clearBtn.disabled = true;
+  clearBtn.textContent = 'Clearing…';
+  try {
+    const { removed } = await fetch('/api/submissions', { method: 'DELETE' }).then((r) => r.json());
+    submissions = [];
+    pendingDecisions.clear();
+    render();
+    renderQueue([]);
+    disarm();
+    clearNote.textContent = `Cleared ${removed} photo${removed === 1 ? '' : 's'}.`;
+    setTimeout(disarm, 4000);
+  } catch (err) {
+    disarm();
+    clearNote.textContent = 'Clearing failed — try again.';
+  } finally {
+    clearBtn.disabled = false;
+  }
+  refresh();
+});
 
 refresh();
 setInterval(refresh, POLL_MS);

@@ -142,6 +142,10 @@ no configuration.
   its next poll and it survives a refresh or a cold start. The screen carries the
   same control, hidden until someone moves the mouse or presses a key (`L` toggles)
   so the kiosk stays clean.
+- **Clearing the wall is a two-click action.** *Clear all photos* in the admin
+  sidebar arms first and deletes on the second click, disarming itself after 5s.
+  It removes the stored images too, not just the records — on every driver. The
+  wall mode is deliberately left alone.
 - **One template, two sizes.** The branded frame in `theme.css` sizes every border,
   gap, and font off a single `--u` length, so the phone's live preview is the same
   markup as the TV — customers see exactly what will appear on the wall.
@@ -157,6 +161,7 @@ no configuration.
 | POST | `/api/submissions/:id/approve` | Mark approved |
 | POST | `/api/submissions/:id/reject` | Mark rejected |
 | GET | `/api/qr` | QR code for the upload page, as a data URL |
+| DELETE | `/api/submissions` | Deletes every submission and its stored image |
 | GET | `/api/wall` | Current wall mode (`loop` or `live`) |
 | POST | `/api/wall` | Switch wall mode: `{ "mode": "loop" \| "live" }` |
 | GET | `/api/health` | Which storage driver is active |

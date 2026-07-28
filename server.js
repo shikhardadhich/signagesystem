@@ -125,6 +125,18 @@ app.get('/api/qr', async (req, res, next) => {
   }
 });
 
+/**
+ * Wipes every submission and its stored image. Irreversible — the admin page
+ * requires a second click before it calls this.
+ */
+app.delete('/api/submissions', async (req, res, next) => {
+  try {
+    res.json(await store.clear());
+  } catch (err) {
+    next(err);
+  }
+});
+
 app.get('/api/wall', async (req, res, next) => {
   try {
     res.json(await store.getWall());
