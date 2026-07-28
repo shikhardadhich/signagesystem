@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The Brew House — Selfie Wall</title>
+<link rel="stylesheet" href="/theme.css">
+<style>
+  html, body {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    background:
+      radial-gradient(ellipse at 50% 0%, #4a2e1b 0%, transparent 60%),
+      linear-gradient(180deg, var(--coffee) 0%, var(--espresso) 100%);
+    color: var(--cream);
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Subtle woodgrain-ish texture so the TV isn't a flat wash of brown. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image: repeating-linear-gradient(
+      92deg,
+      rgba(255, 255, 255, 0.018) 0px,
+      rgba(255, 255, 255, 0.018) 2px,
+      transparent 2px,
+      transparent 9px
+    );
+    pointer-events: none;
+  }
+
+  header {
+    flex: none;
+    text-align: center;
+    padding: 2.4vh 0 1.8vh;
+    border-bottom: 2px solid rgba(201, 151, 63, 0.35);
+    background: rgba(0, 0, 0, 0.18);
+  }
+
+  .brand {
+    font-family: var(--serif);
+    font-size: 4.4vh;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    margin: 0;
+    color: var(--cream);
+  }
+
+  .brand em {
+    color: var(--gold-light);
+    font-style: normal;
+  }
+
+  .tagline {
+    margin: 0.5vh 0 0;
+    font-size: 1.8vh;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: var(--gold);
+  }
+
+  .stage {
+    flex: 1;
+    display: grid;
+    place-items: center;
+    position: relative;
+    min-height: 0;
+  }
+
+  #frame {
+    --u: calc(1vh / 10.8); /* == 1px on a 1080p screen, and scales from there */
+    width: 56vh;
+    opacity: 1;
+    transition: opacity 0.9s ease;
+  }
+
+  #frame.is-fading {
+    opacity: 0;
+  }
+
+  .template__photo {
+    aspect-ratio: 4 / 5;
+  }
+
+  /* ---- empty state ---- */
+
+  .placeholder {
+    text-align: center;
+    max-width: 60vw;
+  }
+
+  .placeholder__cup {
+    font-size: 12vh;
+    line-height: 1;
+    filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.5));
+  }
+
+  .placeholder__title {
+    font-family: var(--serif);
+    font-size: 6vh;
+    margin: 2vh 0 1vh;
+    color: var(--gold-light);
+  }
+
+  .placeholder__sub {
+    font-size: 2.6vh;
+    color: rgba(247, 239, 225, 0.7);
+    margin: 0;
+  }
+
+
+  /* ---- QR corner card ---- */
+
+  .qr {
+    position: fixed;
+    right: 3vh;
+    bottom: 3vh;
+    width: 26vh;
+    background: var(--cream);
+    border: 0.6vh solid var(--gold);
+    border-radius: 1.4vh;
+    padding: 1.6vh;
+    text-align: center;
+    color: var(--coffee);
+    box-shadow: 0 1.6vh 4vh rgba(0, 0, 0, 0.5);
+  }
+
+  .qr img {
+    display: block;
+    width: 100%;
+    border-radius: 0.6vh;
+  }
+
+  .qr__title {
+    font-family: var(--serif);
+    font-weight: 700;
+    font-size: 2.2vh;
+    margin: 1.2vh 0 0.3vh;
+  }
+
+  .qr__sub {
+    font-size: 1.5vh;
+    color: var(--muted);
+    margin: 0;
+    word-break: break-all;
+  }
+
+  /* ---- rotation progress + counter ---- */
+
+  .counter {
+    position: fixed;
+    left: 3vh;
+    bottom: 3vh;
+    font-size: 1.9vh;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(247, 239, 225, 0.55);
+  }
+
+  .progress {
+    position: fixed;
+    left: 0;
+    bottom: 0;
+    height: 0.5vh;
+    width: 0;
+    background: linear-gradient(90deg, var(--gold) 0%, var(--gold-light) 100%);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1 class="brand">The Brew House <em>—</em> Selfie Wall</h1>
+  <p class="tagline">Freshly brewed &amp; freshly posted</p>
+</header>
+
+<main class="stage">
+  <div id="frame" class="template hidden">
+    <img id="photo" class="template__photo" alt="">
+    <div class="template__rule"></div>
+    <p id="name" class="template__name"></p>
+    <p id="message" class="template__message"></p>
+  </div>
+
+  <div id="placeholder" class="placeholder">
+    <div class="placeholder__cup">☕</div>
+    <h2 class="placeholder__title">Scan QR to be featured!</h2>
+    <p class="placeholder__sub">Snap a selfie, add your name, and you'll appear right here on the wall.</p>
+  </div>
+</main>
+
+<aside class="qr">
+  <img id="qr-img" alt="QR code linking to the selfie upload page">
+  <p class="qr__title">Scan to join the wall</p>
+  <p class="qr__sub" id="qr-target"></p>
+</aside>
+
+<div class="counter" id="counter"></div>
+<div class="progress" id="progress"></div>
+
+<script>
+const ROTATE_MS = 8000;
+const POLL_MS = 3000;
+const FADE_MS = 900;
+
+const el = {
+  frame: document.getElementById('frame'),
+  photo: document.getElementById('photo'),
+  name: document.getElementById('name'),
+  message: document.getElementById('message'),
+  placeholder: document.getElementById('placeholder'),
+  counter: document.getElementById('counter'),
+  progress: document.getElementById('progress'),
+};
+
+let queue = [];
+let index = 0;
+let rotateTimer = null;
+
+/* ---- QR code ---- */
+
+fetch('/api/qr')
+  .then((r) => r.json())
+  .then(({ dataUrl, target }) => {
+    document.getElementById('qr-img').src = dataUrl;
+    document.getElementById('qr-target').textContent = target;
+  })
+  .catch(() => {});
+
+/* ---- polling ---- */
+
+async function poll() {
+  try {
+    const next = await (await fetch('/api/queue')).json();
+    if (signature(next) !== signature(queue)) applyQueue(next);
+  } catch (err) {
+    /* Keep showing the last known queue if the server blips. */
+  }
+}
+
+const signature = (list) => list.map((s) => s.id).join(',');
+
+function applyQueue(next) {
+  const currentId = queue[index]?.id;
+  const wasEmpty = queue.length === 0;
+  queue = next;
+  // Warm the cache so a photo is never still downloading when we fade it in.
+  for (const item of queue) new Image().src = item.url;
+
+  if (queue.length === 0) {
+    index = 0;
+    stopRotation();
+    render();
+    return;
+  }
+
+  // Hold on the photo that's currently up if it survived the update.
+  const stillThere = queue.findIndex((s) => s.id === currentId);
+  index = stillThere === -1 ? 0 : stillThere;
+
+  if (wasEmpty || stillThere === -1) {
+    render();
+    startRotation();
+  } else {
+    updateCounter();
+  }
+}
+
+/* ---- rotation ---- */
+
+function startRotation() {
+  stopRotation();
+  restartProgress();
+  if (queue.length > 1) rotateTimer = setInterval(advance, ROTATE_MS);
+}
+
+function stopRotation() {
+  clearInterval(rotateTimer);
+  rotateTimer = null;
+  el.progress.style.transition = 'none';
+  el.progress.style.width = '0';
+}
+
+function advance() {
+  index = (index + 1) % queue.length;
+  el.frame.classList.add('is-fading');
+  setTimeout(() => {
+    render();
+    el.frame.classList.remove('is-fading');
+    restartProgress();
+  }, FADE_MS);
+}
+
+function restartProgress() {
+  el.progress.style.transition = 'none';
+  el.progress.style.width = '0';
+  if (queue.length < 2) return;
+  requestAnimationFrame(() => {
+    el.progress.style.transition = `width ${ROTATE_MS}ms linear`;
+    el.progress.style.width = '100%';
+  });
+}
+
+/* ---- render ---- */
+
+function render() {
+  const item = queue[index];
+
+  if (!item) {
+    el.frame.classList.add('hidden');
+    el.placeholder.classList.remove('hidden');
+    el.counter.textContent = '';
+    return;
+  }
+
+  el.placeholder.classList.add('hidden');
+  el.frame.classList.remove('hidden');
+  el.photo.src = item.url;
+  el.photo.alt = `Selfie from ${item.name}`;
+  el.name.textContent = item.name;
+  el.message.textContent = item.message || '';
+  el.message.style.display = item.message ? '' : 'none';
+  updateCounter();
+}
+
+function updateCounter() {
+  el.counter.textContent = queue.length ? `${index + 1} of ${queue.length} on the wall` : '';
+}
+
+render();
+poll();
+setInterval(poll, POLL_MS);
+</script>
+</body>
+</html>

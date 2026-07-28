@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Join the Selfie Wall — The Brew House</title>
+<link rel="stylesheet" href="/theme.css">
+<style>
+  body {
+    background:
+      radial-gradient(ellipse at 50% -10%, #543421 0%, transparent 55%),
+      linear-gradient(180deg, var(--coffee) 0%, var(--espresso) 100%);
+    min-height: 100vh;
+    padding: 1.25rem 1rem 3rem;
+    color: var(--cream);
+  }
+
+  .wrap {
+    max-width: 460px;
+    margin: 0 auto;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 1.5rem;
+  }
+
+  .brand {
+    font-family: var(--serif);
+    font-size: 1.6rem;
+    margin: 0;
+    color: var(--cream);
+  }
+
+  .brand em {
+    color: var(--gold-light);
+    font-style: normal;
+  }
+
+  .tagline {
+    margin: 0.35rem 0 0;
+    font-size: 0.72rem;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--gold);
+  }
+
+  .card {
+    background: rgba(247, 239, 225, 0.06);
+    border: 1px solid rgba(201, 151, 63, 0.35);
+    border-radius: 16px;
+    padding: 1.25rem;
+  }
+
+  label {
+    display: block;
+    font-size: 0.8rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--gold-light);
+    margin: 0 0 0.4rem;
+  }
+
+  .field + .field {
+    margin-top: 1.1rem;
+  }
+
+  input[type="text"] {
+    width: 100%;
+    font-family: var(--sans);
+    font-size: 1rem;
+    padding: 0.8rem 0.9rem;
+    border-radius: 10px;
+    border: 1px solid rgba(201, 151, 63, 0.4);
+    background: var(--cream);
+    color: var(--ink);
+  }
+
+  input[type="text"]:focus {
+    outline: 2px solid var(--gold);
+    outline-offset: 1px;
+  }
+
+  .counter {
+    font-size: 0.72rem;
+    color: rgba(247, 239, 225, 0.55);
+    text-align: right;
+    margin: 0.35rem 0 0;
+  }
+
+  /* Big tappable file picker; the real input is hidden behind it. */
+  .picker {
+    display: block;
+    text-align: center;
+    padding: 1.4rem 1rem;
+    border: 2px dashed rgba(201, 151, 63, 0.6);
+    border-radius: 12px;
+    background: rgba(201, 151, 63, 0.08);
+    cursor: pointer;
+  }
+
+  .picker span {
+    display: block;
+    font-family: var(--serif);
+    font-size: 1.05rem;
+    color: var(--cream);
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  .picker small {
+    color: rgba(247, 239, 225, 0.6);
+    font-size: 0.8rem;
+  }
+
+  input[type="file"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+  }
+
+  .preview {
+    margin-top: 1.4rem;
+    text-align: center;
+  }
+
+  .preview__label {
+    font-size: 0.72rem;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin: 0 0 0.75rem;
+  }
+
+  #preview-frame {
+    --u: 0.45px;
+    width: 210px;
+    margin: 0 auto;
+  }
+
+  #preview-frame .template__photo {
+    aspect-ratio: 4 / 5;
+  }
+
+  .btn--primary {
+    width: 100%;
+    margin-top: 1.5rem;
+    font-size: 1.05rem;
+    padding: 1rem;
+  }
+
+  .error {
+    margin: 0.9rem 0 0;
+    padding: 0.7rem 0.9rem;
+    border-radius: 10px;
+    background: rgba(162, 69, 47, 0.25);
+    border: 1px solid var(--bad);
+    font-size: 0.9rem;
+  }
+
+  /* ---- confirmation view ---- */
+
+  .done {
+    text-align: center;
+  }
+
+  .done__badge {
+    font-size: 3.4rem;
+    line-height: 1;
+  }
+
+  .done__title {
+    font-family: var(--serif);
+    font-size: 1.7rem;
+    margin: 0.75rem 0 0.35rem;
+    color: var(--gold-light);
+  }
+
+  .done__position {
+    font-size: 1rem;
+    color: rgba(247, 239, 225, 0.8);
+    margin: 0;
+  }
+
+  .status {
+    margin-top: 1.5rem;
+    padding: 1rem;
+    border-radius: 12px;
+    border: 1px solid rgba(201, 151, 63, 0.35);
+    background: rgba(0, 0, 0, 0.2);
+  }
+
+  .status__pill {
+    display: inline-block;
+    font-size: 0.75rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 0.35rem 0.8rem;
+    border-radius: 999px;
+    background: var(--gold);
+    color: var(--espresso);
+    font-weight: 700;
+  }
+
+  .status__pill[data-status="approved"] { background: var(--ok); color: #fff; }
+  .status__pill[data-status="rejected"] { background: var(--bad); color: #fff; }
+
+  .status__text {
+    margin: 0.8rem 0 0;
+    font-size: 0.92rem;
+    color: rgba(247, 239, 225, 0.8);
+    line-height: 1.45;
+  }
+
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1 class="brand">The Brew House <em>—</em> Selfie Wall</h1>
+    <p class="tagline">Get on the big screen</p>
+  </header>
+
+  <!-- ---------- form ---------- -->
+  <form id="form" class="card" autocomplete="off">
+    <div class="field">
+      <label for="name">Your name</label>
+      <input id="name" name="name" type="text" maxlength="40" placeholder="Ada" required>
+    </div>
+
+    <div class="field">
+      <label for="message">Message <span style="text-transform:none;letter-spacing:0">(optional)</span></label>
+      <input id="message" name="message" type="text" maxlength="100" placeholder="Best flat white in town ☕">
+      <p class="counter"><span id="msg-count">0</span>/100</p>
+    </div>
+
+    <div class="field">
+      <label class="picker" for="photo">
+        <span id="picker-text">📷 Tap to take or choose a photo</span>
+        <small>JPG, PNG or WEBP · up to 12&nbsp;MB</small>
+      </label>
+      <input id="photo" name="photo" type="file" accept="image/*" capture="user" required>
+    </div>
+
+    <div class="preview hidden" id="preview">
+      <p class="preview__label">Here's how you'll look on the wall</p>
+      <div id="preview-frame" class="template">
+        <img id="preview-photo" class="template__photo" alt="Preview of your selfie">
+        <div class="template__rule"></div>
+        <p id="preview-name" class="template__name">Your name</p>
+        <p id="preview-message" class="template__message"></p>
+      </div>
+    </div>
+
+    <button type="submit" class="btn btn--primary" id="submit">Send it to the wall</button>
+    <p class="error hidden" id="error"></p>
+  </form>
+
+  <!-- ---------- confirmation ---------- -->
+  <div class="card done hidden" id="done">
+    <div class="done__badge">🎉</div>
+    <h2 class="done__title">You're in the queue!</h2>
+    <p class="done__position" id="position">Position: —</p>
+
+    <div class="status">
+      <span class="status__pill" id="pill">Pending</span>
+      <p class="status__text" id="status-text">Hang tight — our barista is reviewing your photo.</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const POLL_MS = 3000;
+
+const $ = (id) => document.getElementById(id);
+const form = $('form');
+let statusTimer = null;
+
+/* ---- live preview ---- */
+
+$('name').addEventListener('input', (e) => {
+  $('preview-name').textContent = e.target.value.trim() || 'Your name';
+});
+
+$('message').addEventListener('input', (e) => {
+  const value = e.target.value;
+  $('msg-count').textContent = value.length;
+  $('preview-message').textContent = value.trim();
+  $('preview-message').style.display = value.trim() ? '' : 'none';
+});
+
+$('photo').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  $('picker-text').textContent = `📷 ${file.name}`;
+  $('preview-photo').src = URL.createObjectURL(file);
+  $('preview').classList.remove('hidden');
+  $('preview-name').textContent = $('name').value.trim() || 'Your name';
+});
+
+/* ---- submit ---- */
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('error').classList.add('hidden');
+  $('submit').disabled = true;
+  $('submit').textContent = 'Sending…';
+
+  try {
+    const res = await fetch('/api/upload', { method: 'POST', body: new FormData(form) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Upload failed');
+
+    form.classList.add('hidden');
+    $('done').classList.remove('hidden');
+    $('position').textContent = `Position: ${data.position}`;
+    trackStatus(data.id);
+  } catch (err) {
+    $('error').textContent = err.message;
+    $('error').classList.remove('hidden');
+    $('submit').disabled = false;
+    $('submit').textContent = 'Send it to the wall';
+  }
+});
+
+/* ---- status polling ---- */
+
+function trackStatus(id) {
+  const check = async () => {
+    try {
+      const data = await (await fetch(`/api/status/${id}`)).json();
+      renderStatus(data);
+      if (data.status !== 'pending') clearInterval(statusTimer);
+    } catch (err) {
+      /* Retry on the next tick. */
+    }
+  };
+  check();
+  statusTimer = setInterval(check, POLL_MS);
+}
+
+function renderStatus(data) {
+  const pill = $('pill');
+  pill.dataset.status = data.status;
+
+  if (data.status === 'pending') {
+    pill.textContent = 'Pending';
+    $('position').textContent = `Position: ${data.position}`;
+    $('status-text').textContent = 'Hang tight — our barista is reviewing your photo.';
+    return;
+  }
+
+  if (data.status === 'approved') {
+    pill.textContent = 'On the wall';
+    $('position').textContent = `Slot ${data.queuePosition} of ${data.queueLength} in the rotation`;
+    $('status-text').textContent = "You're live! Look up at the screen — your selfie is in the rotation.";
+    return;
+  }
+
+  pill.textContent = 'Not this time';
+  $('position').textContent = '';
+  $('status-text').textContent = "This one didn't make the wall. Feel free to snap another and try again.";
+}
+</script>
+</body>
+</html>

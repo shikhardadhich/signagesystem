@@ -1,0 +1,155 @@
+/* Shared warm-cafe theme for all three Selfie Wall pages. */
+
+:root {
+  --espresso: #2a1a0f;
+  --coffee: #3b2415;
+  --mocha: #5a3a24;
+  --caramel: #8a5a33;
+  --gold: #c9973f;
+  --gold-light: #e6c179;
+  --cream: #f7efe1;
+  --cream-deep: #ebdcc4;
+  --ink: #34210f;
+  --muted: #8a7358;
+  --ok: #4e7d3f;
+  --bad: #a2452f;
+
+  --serif: "Georgia", "Times New Roman", serif;
+  --sans: "Avenir Next", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--sans);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ---- The branded photo template, shared by the screen and the phone preview.
+   Every dimension is a multiple of --u, so overriding that one length renders
+   the same markup at TV size or at thumbnail size. ---- */
+
+.template {
+  --u: 1px;
+  background: linear-gradient(160deg, var(--cream) 0%, var(--cream-deep) 100%);
+  border: calc(6 * var(--u)) solid var(--gold);
+  border-radius: calc(10 * var(--u));
+  padding: calc(22 * var(--u));
+  box-shadow:
+    0 0 0 calc(3 * var(--u)) var(--coffee),
+    0 calc(24 * var(--u)) calc(60 * var(--u)) rgba(0, 0, 0, 0.45);
+  position: relative;
+  text-align: center;
+}
+
+/* Decorative inner hairline border. */
+.template::after {
+  content: "";
+  position: absolute;
+  inset: calc(9 * var(--u));
+  border: calc(1 * var(--u)) solid var(--caramel);
+  border-radius: calc(4 * var(--u));
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.template__photo {
+  display: block;
+  width: 100%;
+  object-fit: cover;
+  background: var(--cream-deep);
+  border: calc(2 * var(--u)) solid var(--coffee);
+  border-radius: calc(3 * var(--u));
+}
+
+.template__rule {
+  width: calc(120 * var(--u));
+  height: calc(2 * var(--u));
+  margin: calc(16 * var(--u)) auto calc(10 * var(--u));
+  background: var(--gold);
+  position: relative;
+}
+
+.template__rule::before,
+.template__rule::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: calc(7 * var(--u));
+  height: calc(7 * var(--u));
+  background: var(--gold);
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.template__rule::before {
+  left: calc(-14 * var(--u));
+}
+
+.template__rule::after {
+  right: calc(-14 * var(--u));
+}
+
+.template__name {
+  font-family: var(--serif);
+  font-weight: 700;
+  font-size: calc(38 * var(--u));
+  line-height: 1.15;
+  color: var(--coffee);
+  margin: 0;
+  word-break: break-word;
+}
+
+.template__message {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: calc(24 * var(--u));
+  line-height: 1.35;
+  color: var(--mocha);
+  margin: calc(8 * var(--u)) 0 0;
+  word-break: break-word;
+}
+
+/* ---- Shared controls ---- */
+
+.btn {
+  font-family: var(--sans);
+  font-size: 1rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 10px;
+  padding: 0.85rem 1.4rem;
+  cursor: pointer;
+  transition: transform 0.12s ease, opacity 0.12s ease;
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  background: linear-gradient(180deg, var(--gold) 0%, var(--caramel) 100%);
+  color: #fff;
+}
+
+.btn--approve {
+  background: var(--ok);
+  color: #fff;
+}
+
+.btn--reject {
+  background: var(--bad);
+  color: #fff;
+}

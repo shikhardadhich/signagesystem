@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Moderation — The Brew House Selfie Wall</title>
+<link rel="stylesheet" href="/theme.css">
+<style>
+  body {
+    background: linear-gradient(180deg, #fdf8ef 0%, var(--cream) 100%);
+    min-height: 100vh;
+    color: var(--ink);
+  }
+
+  header {
+    background: linear-gradient(180deg, var(--coffee) 0%, var(--espresso) 100%);
+    color: var(--cream);
+    padding: 1.4rem 1.5rem;
+    border-bottom: 3px solid var(--gold);
+  }
+
+  .header-inner {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+
+  .brand {
+    font-family: var(--serif);
+    font-size: 1.5rem;
+    margin: 0;
+  }
+
+  .brand em {
+    color: var(--gold-light);
+    font-style: normal;
+  }
+
+  .links a {
+    color: var(--gold-light);
+    font-size: 0.85rem;
+    text-decoration: none;
+    margin-left: 1.1rem;
+    border-bottom: 1px solid transparent;
+  }
+
+  .links a:hover {
+    border-bottom-color: var(--gold-light);
+  }
+
+  main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 1.75rem 1.5rem 4rem;
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr);
+    gap: 2rem;
+    align-items: start;
+  }
+
+  @media (max-width: 820px) {
+    main { grid-template-columns: 1fr; }
+  }
+
+  h2 {
+    font-family: var(--serif);
+    font-size: 1.15rem;
+    margin: 0 0 0.9rem;
+    color: var(--coffee);
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .count {
+    font-family: var(--sans);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    background: var(--gold);
+    color: #fff;
+    border-radius: 999px;
+    padding: 0.2rem 0.6rem;
+  }
+
+  /* ---- submission rows ---- */
+
+  .row {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    background: #fff;
+    border: 1px solid var(--cream-deep);
+    border-left: 5px solid var(--muted);
+    border-radius: 12px;
+    padding: 0.85rem;
+    margin-bottom: 0.85rem;
+    box-shadow: 0 2px 6px rgba(59, 36, 21, 0.06);
+  }
+
+  .row[data-status="pending"]  { border-left-color: var(--gold); }
+  .row[data-status="approved"] { border-left-color: var(--ok); }
+  .row[data-status="rejected"] { border-left-color: var(--bad); opacity: 0.65; }
+
+  .thumb {
+    width: 72px;
+    height: 90px;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 2px solid var(--gold);
+    background: var(--cream-deep);
+    flex: none;
+  }
+
+  .meta {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .meta__name {
+    font-family: var(--serif);
+    font-weight: 700;
+    font-size: 1.05rem;
+    margin: 0;
+    color: var(--coffee);
+  }
+
+  .meta__message {
+    font-style: italic;
+    color: var(--mocha);
+    margin: 0.2rem 0 0;
+    font-size: 0.9rem;
+    overflow-wrap: anywhere;
+  }
+
+  .meta__time {
+    margin: 0.35rem 0 0;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    flex: none;
+  }
+
+  .actions .btn {
+    font-size: 0.82rem;
+    padding: 0.5rem 0.95rem;
+  }
+
+  .badge {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.35rem 0.7rem;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+
+  .badge[data-status="approved"] { background: rgba(78, 125, 63, 0.15); color: var(--ok); }
+  .badge[data-status="rejected"] { background: rgba(162, 69, 47, 0.15); color: var(--bad); }
+
+  /* ---- queue sidebar ---- */
+
+  .queue {
+    background: #fff;
+    border: 1px solid var(--cream-deep);
+    border-radius: 12px;
+    padding: 1rem;
+    box-shadow: 0 2px 6px rgba(59, 36, 21, 0.06);
+    position: sticky;
+    top: 1.5rem;
+  }
+
+  .queue ol {
+    list-style: none;
+    counter-reset: slot;
+    margin: 0;
+    padding: 0;
+  }
+
+  .queue li {
+    counter-increment: slot;
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px dashed var(--cream-deep);
+  }
+
+  .queue li:last-child {
+    border-bottom: none;
+  }
+
+  .queue li::before {
+    content: counter(slot);
+    flex: none;
+    width: 1.6rem;
+    height: 1.6rem;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--gold);
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+
+  .queue img {
+    width: 30px;
+    height: 38px;
+    object-fit: cover;
+    border-radius: 4px;
+    flex: none;
+  }
+
+  .queue span {
+    font-size: 0.9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .empty {
+    color: var(--muted);
+    font-size: 0.9rem;
+    font-style: italic;
+    margin: 0;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <h1 class="brand">The Brew House <em>—</em> Moderation</h1>
+    <nav class="links">
+      <a href="/screen" target="_blank">Display screen ↗</a>
+      <a href="/upload" target="_blank">Upload page ↗</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section>
+    <h2>Submissions <span class="count" id="sub-count">0</span></h2>
+    <div id="list"></div>
+  </section>
+
+  <aside class="queue">
+    <h2>On the wall <span class="count" id="queue-count">0</span></h2>
+    <ol id="queue"></ol>
+    <p class="empty hidden" id="queue-empty">Nothing approved yet.</p>
+  </aside>
+</main>
+
+<script>
+const POLL_MS = 3000;
+const $ = (id) => document.getElementById(id);
+
+async function refresh() {
+  try {
+    const [submissions, queue] = await Promise.all([
+      fetch('/api/submissions').then((r) => r.json()),
+      fetch('/api/queue').then((r) => r.json()),
+    ]);
+    renderSubmissions(submissions);
+    renderQueue(queue);
+  } catch (err) {
+    /* Leave the last good render on screen and retry next tick. */
+  }
+}
+
+function renderSubmissions(items) {
+  $('sub-count').textContent = items.length;
+  const list = $('list');
+
+  if (!items.length) {
+    list.innerHTML = '<p class="empty">No submissions yet — open the upload page and send one through.</p>';
+    return;
+  }
+
+  list.innerHTML = '';
+  for (const item of items) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.dataset.status = item.status;
+
+    const thumb = document.createElement('img');
+    thumb.className = 'thumb';
+    thumb.src = item.url;
+    thumb.alt = `Selfie from ${item.name}`;
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    const name = document.createElement('p');
+    name.className = 'meta__name';
+    name.textContent = item.name;
+    const message = document.createElement('p');
+    message.className = 'meta__message';
+    message.textContent = item.message || '—';
+    const time = document.createElement('p');
+    time.className = 'meta__time';
+    time.textContent = new Date(item.submittedAt).toLocaleTimeString();
+    meta.append(name, message, time);
+
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+    if (item.status === 'pending') {
+      actions.append(
+        button('Approve', 'btn--approve', () => decide(item.id, 'approve')),
+        button('Reject', 'btn--reject', () => decide(item.id, 'reject')),
+      );
+    } else {
+      const badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.dataset.status = item.status;
+      badge.textContent = item.status;
+      actions.append(badge);
+    }
+
+    row.append(thumb, meta, actions);
+    list.append(row);
+  }
+}
+
+function button(label, variant, onClick) {
+  const btn = document.createElement('button');
+  btn.className = `btn ${variant}`;
+  btn.textContent = label;
+  btn.addEventListener('click', onClick);
+  return btn;
+}
+
+function renderQueue(queue) {
+  $('queue-count').textContent = queue.length;
+  $('queue-empty').classList.toggle('hidden', queue.length > 0);
+
+  const ol = $('queue');
+  ol.innerHTML = '';
+  for (const item of queue) {
+    const li = document.createElement('li');
+    const img = document.createElement('img');
+    img.src = item.url;
+    img.alt = '';
+    const span = document.createElement('span');
+    span.textContent = item.name;
+    li.append(img, span);
+    ol.append(li);
+  }
+}
+
+async function decide(id, action) {
+  await fetch(`/api/submissions/${id}/${action}`, { method: 'POST' });
+  refresh();
+}
+
+refresh();
+setInterval(refresh, POLL_MS);
+</script>
+</body>
+</html>
