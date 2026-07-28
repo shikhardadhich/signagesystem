@@ -24,7 +24,8 @@ const hasFirebase = Boolean(
 );
 const hasBlob = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
 const hasRedis = Boolean(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
-const hasVercel = hasBlob && hasRedis;
+// Blob is the only hard requirement; Redis just makes reads cheaper.
+const hasVercel = hasBlob;
 
 const forced = process.env.STORAGE_DRIVER;
 const chosen = forced || (hasFirebase ? 'firebase' : hasVercel ? 'vercel' : 'local');
@@ -56,12 +57,18 @@ function newSubmission(name, message) {
 
 function localDriver() {
   const submissions = [];
-  // On a serverless host the filesystem is read-only, so this fails. Tolerate
-  // it: the pages should still render and explain themselves rather than 500
-  // on boot.
-  let writable = true;
+
+  // Probe with a real write. mkdirSync({recursive:true}) is NOT a writability
+  // test: uploads/ ships in the deployment bundle, and creating a directory
+  // that already exists succeeds even on a read-only filesystem — so it
+  // reports success right up until the first upload fails with EROFS.
+  let writable = false;
   try {
     fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+    const probe = path.join(UPLOAD_DIR, '.write-probe');
+    fs.writeFileSync(probe, '');
+    fs.unlinkSync(probe);
+    writable = true;
   } catch (err) {
     writable = false;
   }
@@ -71,8 +78,8 @@ function localDriver() {
     async add(name, message, file) {
       if (!writable) {
         const err = new Error(
-          'Photo storage is not configured on this deployment. Connect a storage backend ' +
-          'and redeploy — see README.md.'
+          "This deployment has no photo storage, so uploads can't be saved. " +
+          'Add a Blob store to the project and redeploy — see README.md.'
         );
         err.status = 503;
         throw err;
@@ -161,12 +168,42 @@ function firebaseDriver() {
 /* -------------------------------------------------------------- vercel -- */
 
 function vercelDriver() {
-  const { put } = require('@vercel/blob');
-  const { Redis } = require('@upstash/redis');
-  const redis = Redis.fromEnv();
+  const { put, list } = require('@vercel/blob');
 
   const IDS = 'selfiewall:ids';
   const key = (id) => `selfiewall:sub:${id}`;
+  const META = 'meta/';
+
+  // Redis is optional. With it, the queue is one round trip. Without it, each
+  // submission's record is its own small JSON blob — so a Blob store alone is
+  // enough to run the wall, at the cost of a list + one fetch per record.
+  const redis = hasRedis ? require('@upstash/redis').Redis.fromEnv() : null;
+
+  const writeMeta = (submission) =>
+    put(`${META}${submission.id}.json`, JSON.stringify(submission), {
+      access: 'public',
+      contentType: 'application/json',
+      addRandomSuffix: false,
+      allowOverwrite: true,
+      // The queue is polled every 3s; a cached record would show stale
+      // moderation state on the wall.
+      cacheControlMaxAge: 0,
+    });
+
+  async function readMeta(prefix) {
+    const { blobs } = await list({ prefix });
+    const records = await Promise.all(
+      blobs.map(async (b) => {
+        try {
+          const res = await fetch(`${b.url}?t=${Date.now()}`, { cache: 'no-store' });
+          return res.ok ? await res.json() : null;
+        } catch (err) {
+          return null;
+        }
+      })
+    );
+    return records.filter(Boolean);
+  }
 
   return {
     name: 'vercel',
@@ -175,29 +212,40 @@ function vercelDriver() {
       const blob = await put(`selfies/${submission.id}${extensionFor(file)}`, file.buffer, {
         access: 'public',
         contentType: file.mimetype,
+        addRandomSuffix: false,
       });
       submission.url = blob.url;
-      // Record first, then index — a crash between the two leaves an orphan
-      // record rather than an id pointing at nothing.
-      await redis.set(key(submission.id), submission);
-      await redis.rpush(IDS, submission.id);
+
+      if (redis) {
+        // Record first, then index — a crash between the two leaves an orphan
+        // record rather than an id pointing at nothing.
+        await redis.set(key(submission.id), submission);
+        await redis.rpush(IDS, submission.id);
+      } else {
+        await writeMeta(submission);
+      }
       return submission;
     },
     async list() {
+      if (!redis) return readMeta(META);
       const ids = await redis.lrange(IDS, 0, -1);
       if (!ids.length) return [];
       const records = await redis.mget(...ids.map(key));
       return records.filter(Boolean);
     },
     async get(id) {
+      if (!redis) return (await readMeta(`${META}${id}.json`))[0] || null;
       return (await redis.get(key(id))) || null;
     },
     async setStatus(id, status) {
-      const submission = await redis.get(key(id));
+      const submission = await this.get(id);
       if (!submission) return null;
       submission.status = status;
       submission.decidedAt = Date.now();
-      await redis.set(key(id), submission);
+      // Each record owns its own key/blob, so a decision never rewrites a
+      // shared index and cannot clobber a concurrent upload.
+      if (redis) await redis.set(key(id), submission);
+      else await writeMeta(submission);
       return submission;
     },
   };
@@ -211,27 +259,22 @@ if (!DRIVERS[chosen]) {
 
 const store = DRIVERS[chosen]();
 
-const LABELS = {
-  local: 'local (disk + memory)',
-  firebase: 'firebase (Cloud Storage + Firestore)',
-  vercel: 'vercel (Blob + Redis)',
-};
-
 /**
- * Explains the active driver at boot, and warns when a hosted backend is only
- * half configured — that combination falls back to local storage, which on a
- * serverless host means uploads vanish between requests.
+ * Explains the active driver, and says plainly when a serverless deployment has
+ * fallen back to local storage — which cannot work there, and is the single
+ * most likely reason an upload fails.
  */
 store.describe = () => {
-  if (store.name !== 'local') return LABELS[store.name];
-  if (hasBlob || hasRedis) {
-    const missing = [
-      hasBlob ? null : 'BLOB_READ_WRITE_TOKEN',
-      hasRedis ? null : 'KV_REST_API_URL + KV_REST_API_TOKEN',
-    ].filter(Boolean).join(' and ');
-    return `local (INCOMPLETE Vercel config — missing ${missing})`;
+  if (store.name === 'firebase') return 'firebase (Cloud Storage + Firestore)';
+  if (store.name === 'vercel') {
+    return hasRedis ? 'vercel (Blob + Redis)' : 'vercel (Blob only)';
   }
-  return LABELS.local;
+  const serverless =
+    process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.K_SERVICE;
+  if (serverless) {
+    return 'local (NO STORAGE CONFIGURED — uploads will fail on a read-only filesystem)';
+  }
+  return 'local (disk + memory)';
 };
 
 store.isCloud = store.name !== 'local';

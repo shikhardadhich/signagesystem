@@ -39,7 +39,7 @@ and picks one from the environment:
 | --- | --- | --- | --- |
 | `local` | no cloud env vars (i.e. `npm start`) | `uploads/` on disk | in-memory array |
 | `firebase` | `FIREBASE_CONFIG` / `GCLOUD_PROJECT` present (set automatically in Cloud Functions) | Cloud Storage | Firestore |
-| `vercel` | `BLOB_READ_WRITE_TOKEN` + `KV_REST_API_*` present | Vercel Blob | Redis |
+| `vercel` | `BLOB_READ_WRITE_TOKEN` present | Vercel Blob | Redis if configured, else one JSON blob per submission |
 
 `STORAGE_DRIVER=local|firebase|vercel` forces one. Nothing to configure locally —
 the local driver stays the default, so `npm start` still needs no cloud account.
@@ -84,10 +84,15 @@ Hosting serves `public/` and rewrites the rest to the Express app in
    `shikhardadhich/signagesystem`, branch `claude/cafe-selfie-wall-poc-camucx`.
    Leave the build settings alone; `vercel.json` routes every non-static request
    to the Express app in `api/index.js` and lets the CDN serve `public/`.
-2. **Add storage.** On the project's *Storage* tab create a **Blob** store and a
-   **Redis** store (Upstash), and connect both to the project. That injects:
-   - `BLOB_READ_WRITE_TOKEN`
-   - `KV_REST_API_URL` and `KV_REST_API_TOKEN`
+2. **Add storage.** On the project's *Storage* tab create a **Blob** store and
+   connect it to the project. That injects `BLOB_READ_WRITE_TOKEN`, which is all
+   the wall needs — each submission's record is kept as its own small JSON blob
+   next to its photo.
+
+   Optionally also connect a **Redis** store (`KV_REST_API_URL` +
+   `KV_REST_API_TOKEN`). It is picked up automatically and makes reads a single
+   round trip instead of a list plus one fetch per record — worth adding if the
+   wall grows past a couple of dozen photos, unnecessary for a demo.
 3. **Redeploy** so the function picks up the new variables.
 
 The rewrite deliberately sends **every** path to `/api`, including `/api/*`.
