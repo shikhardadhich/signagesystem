@@ -172,8 +172,17 @@ no configuration.
   briefly so two clients polling out of phase cost one read between them. Steady
   state is about 0.5 operations per poll instead of 11. Every mutation drops the
   cache, so a decision is still visible on the very next poll.
-- **The screen rotates every 8 seconds** with a fade, and holds its place when the
-  queue changes underneath it rather than jumping back to the first photo.
+- **The screen has two states.** It rests on a *menu board* — branding, the
+  signature items and their prices, and a right-hand panel with the QR, the
+  three how-it-works steps and a grid of recent selfies. A selfie then *takes
+  over* the whole screen for 15 seconds before the board returns.
+- **The takeover frame matches the photo.** Its aspect ratio is set from the
+  image's own dimensions, so a portrait selfie and a landscape one both fill
+  their frame without being cropped — no face loses its top to a fixed shape.
+- **The board is edited, not coded.** `public/menu.json` holds the cafe name,
+  tagline, signature items with prices, the banner and the QR panel copy. Drop
+  photos at the paths named there (`public/assets/menu/…`); anything missing
+  falls back to the crest, so the board never looks broken.
 - **A photo and its caption always appear together.** The incoming photo and text
   are staged in the hidden layer, and the crossfade only starts once the image has
   decoded — otherwise the caption lands first and the frame sits empty for a beat.
@@ -188,11 +197,13 @@ no configuration.
   itself when a long caption would otherwise overflow.
 - **Two wall modes, switched from the admin page or the screen itself.** *Looping* cycles every approved
   photo. *Live* stops rotating and shows only photos approved after the switch, so
-  the wall stands by on a "Ready for your selfie!" screen and puts each new arrival
-  straight up. The mode lives in the store, not the page, so the TV picks it up on
-  its next poll and it survives a refresh or a cold start. The screen carries the
-  same control, hidden until someone moves the mouse or presses a key (`L` toggles)
-  so the kiosk stays clean.
+  the board rests and each new arrival takes over in turn — oldest first, one per
+  pass, so a burst of approvals each gets its own 15 seconds instead of only the
+  last being seen. Freshness is tracked by a decision-time watermark rather than
+  by photo id, so rejecting and re-approving a photo correctly counts as new. The
+  mode lives in the store, not the page, so the TV picks it up on its next poll
+  and it survives a refresh or a cold start. The screen carries the same control,
+  hidden until someone moves the mouse or presses a key (`L` toggles).
 - **Photos are shrunk on the phone before upload.** A modern camera hands over
   3-6 MB while the photo occupies at most about 900px even on a 4K panel, so the
   browser downscales to a 1600px long edge and re-encodes as JPEG — a 3.2 MB shot
@@ -241,7 +252,8 @@ storage.rules      denies direct client access to Cloud Storage
 firestore.rules    denies direct client access to Firestore
 api/index.js       Vercel serverless entry point
 vercel.json        routes non-static requests to the Express app
-public/theme.css   shared cafe palette + the branded photo template
+public/menu.json   board content: items, prices, copy — edit this, not the HTML
+public/theme.css   shared cafe palette + the branded photo frame
 public/screen.html display screen
 public/upload.html phone upload page
 public/admin.html  moderation dashboard

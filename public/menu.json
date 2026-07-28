@@ -1,0 +1,46 @@
+{
+  "name": "The Brew House",
+  "tagline": "Fresh coffee. Real moments.",
+  "established": "2018",
+  "sectionTitle": "Our Signatures",
+  "items": [
+    {
+      "name": "Cappuccino",
+      "description": "Smooth, balanced and perfectly brewed.",
+      "price": "₹160",
+      "image": "assets/menu/cappuccino.jpg"
+    },
+    {
+      "name": "Iced Latte",
+      "description": "Chilled, creamy and always refreshing.",
+      "price": "₹170",
+      "image": "assets/menu/iced-latte.jpg"
+    },
+    {
+      "name": "Chocolate Cake",
+      "description": "Rich, moist and made to indulge.",
+      "price": "₹140",
+      "image": "assets/menu/chocolate-cake.jpg"
+    },
+    {
+      "name": "Butter Croissant",
+      "description": "Flaky, buttery and baked fresh daily.",
+      "price": "₹120",
+      "image": "assets/menu/butter-croissant.jpg"
+    }
+  ],
+  "banner": {
+    "title": "Good coffee. Good vibes.",
+    "subtitle": "Thank you for being a part of our story."
+  },
+  "wall": {
+    "kicker": "Be part of",
+    "title": "Our Wall!",
+    "subtitle": "Scan to upload your selfie",
+    "steps": [
+      { "title": "Scan", "detail": "the QR code" },
+      { "title": "Take", "detail": "a selfie" },
+      { "title": "See yourself", "detail": "on our wall" }
+    ]
+  }
+}

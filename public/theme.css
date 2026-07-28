@@ -14,6 +14,15 @@
   --ok: #4e7d3f;
   --bad: #a2452f;
 
+  /* Menu-board palette: ivory paper, gold rules, warm brown type. */
+  --paper: #f7f0e3;
+  --paper-deep: #efe5d3;
+  --card: #fdf9f1;
+  --line: #e3d7c0;
+  --ink-deep: #3b2a18;
+  --ink-soft: #8a7a66;
+  --gold-deep: #a87d33;
+
   --serif: "Georgia", "Times New Roman", serif;
   --sans: "Avenir Next", "Segoe UI", system-ui, -apple-system, sans-serif;
 
@@ -76,33 +85,19 @@ body {
   }
 }
 
-/* ---- The branded photo template, shared by the screen and the phone preview.
-   Every dimension is a multiple of --u, so overriding that one length renders
-   the same markup at TV size or at thumbnail size.
-
-   The carved frame is assets/frame.png (generated art, 548x731 with the white
-   surround and the centre opening keyed to transparent) applied as a
-   border-image. Units below are that file's own pixels: at --u: 1px the frame
-   renders at its native size, so the border slices never distort. ---- */
+/* ---- The branded photo frame, shared by the wall takeover and the phone's
+   live preview, so a customer sees exactly what will go up. Everything is a
+   multiple of --u; override that one length to change the size. ---- */
 
 .template {
   --u: 1px;
-  width: calc(548 * var(--u));
-  padding: calc(12 * var(--u));
-  border-style: solid;
-  border-width: calc(93 * var(--u)) calc(96 * var(--u)) calc(97 * var(--u)) calc(96 * var(--u));
-  border-image-source: url("assets/frame.png");
-  border-image-slice: 93 96 97 96;
-  border-image-repeat: stretch;
-  /* Keep the cream mount inside the opening — it must not paint under the
-     frame's transparent outer corners. */
-  background: linear-gradient(160deg, var(--cream) 0%, var(--cream-deep) 100%);
-  background-clip: padding-box;
-  /* drop-shadow follows the frame's alpha silhouette; box-shadow would trace a
-     rectangle around the ornate corners instead. */
-  filter: drop-shadow(0 calc(10 * var(--u)) calc(22 * var(--u)) rgba(0, 0, 0, 0.55));
   position: relative;
-  text-align: center;
+  border-radius: calc(16 * var(--u));
+  padding: calc(7 * var(--u));
+  border: calc(1 * var(--u)) solid var(--gold);
+  background: var(--card);
+  box-shadow: 0 calc(14 * var(--u)) calc(36 * var(--u)) rgba(88, 62, 33, 0.22);
+  overflow: hidden;
 }
 
 .template__photo {
@@ -110,46 +105,30 @@ body {
   width: 100%;
   aspect-ratio: 4 / 5;
   object-fit: cover;
-  background: var(--cream-deep);
-  border: calc(2 * var(--u)) solid var(--coffee);
+  border-radius: calc(11 * var(--u));
+  background: var(--paper-deep);
 }
 
-.template__rule {
-  width: calc(120 * var(--u));
-  height: calc(2 * var(--u));
-  margin: calc(16 * var(--u)) auto calc(10 * var(--u));
-  background: var(--gold);
-  position: relative;
-}
-
-.template__rule::before,
-.template__rule::after {
-  content: "";
+/* Caption sits over the photo so the artwork keeps the whole frame. */
+.template__caption {
   position: absolute;
-  top: 50%;
-  width: calc(7 * var(--u));
-  height: calc(7 * var(--u));
-  background: var(--gold);
-  transform: translateY(-50%) rotate(45deg);
-}
-
-.template__rule::before {
-  left: calc(-14 * var(--u));
-}
-
-.template__rule::after {
-  right: calc(-14 * var(--u));
+  left: calc(7 * var(--u));
+  right: calc(7 * var(--u));
+  bottom: calc(7 * var(--u));
+  padding: calc(48 * var(--u)) calc(16 * var(--u)) calc(16 * var(--u));
+  text-align: center;
+  border-radius: 0 0 calc(11 * var(--u)) calc(11 * var(--u));
+  background: linear-gradient(180deg, transparent, rgba(40, 24, 10, 0.82));
 }
 
 .template__name {
   font-family: var(--serif);
   font-weight: 700;
-  font-size: calc(38 * var(--u));
+  font-size: calc(30 * var(--u));
   line-height: 1.15;
-  color: var(--coffee);
+  color: #fff;
   margin: 0;
-  /* Long single-word names wrap instead of pushing through the frame; the
-     clamp stops a pathological entry from unbalancing the mount. */
+  text-shadow: 0 calc(2 * var(--u)) calc(10 * var(--u)) rgba(0, 0, 0, 0.55);
   overflow-wrap: anywhere;
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -160,14 +139,15 @@ body {
 .template__message {
   font-family: var(--serif);
   font-style: italic;
-  font-size: calc(24 * var(--u));
+  font-size: calc(19 * var(--u));
   line-height: 1.35;
-  color: var(--mocha);
-  margin: calc(8 * var(--u)) 0 0;
+  color: rgba(255, 255, 255, 0.92);
+  margin: calc(5 * var(--u)) 0 0;
+  text-shadow: 0 calc(2 * var(--u)) calc(10 * var(--u)) rgba(0, 0, 0, 0.55);
   overflow-wrap: anywhere;
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   overflow: hidden;
 }
 

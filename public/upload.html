@@ -173,9 +173,10 @@
     margin: 0 0 0.75rem;
   }
 
-  /* Same frame artwork as the TV, at 0.42 of its native pixel size. */
+  /* Same frame the wall uses, scaled down for the phone. */
   #preview-frame {
-    --u: 0.42px;
+    --u: 0.7px;
+    width: 230px;
     margin: 0 auto;
   }
 
@@ -286,9 +287,10 @@
       <p class="preview__label">Here's how you'll look on the wall</p>
       <div id="preview-frame" class="template">
         <img id="preview-photo" class="template__photo" alt="Preview of your selfie">
-        <div class="template__rule"></div>
-        <p id="preview-name" class="template__name">Your name</p>
-        <p id="preview-message" class="template__message"></p>
+        <div class="template__caption">
+          <p id="preview-name" class="template__name">Your name</p>
+          <p id="preview-message" class="template__message"></p>
+        </div>
       </div>
     </div>
 
