@@ -145,6 +145,7 @@ no configuration.
 | POST | `/api/submissions/:id/reject` | Mark rejected |
 | GET | `/api/qr` | QR code for the upload page, as a data URL |
 | GET | `/api/health` | Which storage driver is active |
+| GET | `/api/photo/:id` | Streams a photo from a private Blob store (unused on public stores) |
 
 Uploads are capped at 12 MB and must be images. The upload is held in memory and
 only persisted once the name and file both validate, so a rejected submission
