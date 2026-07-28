@@ -304,13 +304,13 @@
 <main class="stage">
   <div id="deck" class="deck hidden" aria-live="polite">
     <div class="template layer" data-layer="0">
-      <img class="template__photo" alt="">
+      <img class="template__photo" alt="" decoding="async">
       <div class="template__rule"></div>
       <p class="template__name"></p>
       <p class="template__message"></p>
     </div>
     <div class="template layer" data-layer="1">
-      <img class="template__photo" alt="">
+      <img class="template__photo" alt="" decoding="async">
       <div class="template__rule"></div>
       <p class="template__name"></p>
       <p class="template__message"></p>
@@ -482,9 +482,9 @@ function stopRotation() {
   el.progress.style.width = '0';
 }
 
-function advance() {
+async function advance() {
   index = (index + 1) % queue.length;
-  show(index);
+  await show(index);
   restartProgress();
 }
 
@@ -505,19 +505,50 @@ function restartProgress() {
  * outgoing and incoming photos overlap instead of dipping through an empty
  * stage. `instant` skips the fade for the very first photo.
  */
-function show(i, { instant = false } = {}) {
+/**
+ * Resolves once the image is decoded and safe to paint, so a photo and its
+ * caption never appear at different moments. Errors and slow loads resolve too
+ * — a wall that stalls on one bad photo is worse than one that shows it late.
+ */
+function imageReady(img, timeout = 6000) {
+  if (img.complete && img.naturalWidth) return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      img.removeEventListener('load', done);
+      img.removeEventListener('error', done);
+      resolve();
+    };
+    const timer = setTimeout(done, timeout);
+    img.addEventListener('load', done, { once: true });
+    img.addEventListener('error', done, { once: true });
+    if (img.decode) img.decode().then(done, () => {});
+  });
+}
+
+let showToken = 0;
+
+async function show(i, { instant = false } = {}) {
   const item = queue[i];
   if (!item) return showEmpty();
 
-  el.placeholder.classList.add('hidden');
-  el.deck.classList.remove('hidden');
+  const token = ++showToken;
 
+  // Paint into the hidden layer first. Nothing here is visible yet, so the
+  // caption can be staged while the photo is still arriving.
   const back = instant ? layers[front] : layers[1 - front];
   back.photo.src = item.url;
   back.photo.alt = `Selfie from ${item.name}`;
   back.name.textContent = item.name;
   back.message.textContent = item.message || '';
   back.message.style.display = item.message ? '' : 'none';
+
+  await imageReady(back.photo);
+  // A newer show() started while this photo was loading — drop this one.
+  if (token !== showToken) return;
+
+  el.placeholder.classList.add('hidden');
+  el.deck.classList.remove('hidden');
 
   if (!instant) front = 1 - front;
   layers.forEach((l, n) => l.root.classList.toggle('is-front', n === front));
@@ -555,6 +586,7 @@ window.addEventListener('resize', () => {
 });
 
 function showEmpty() {
+  showToken += 1;
   el.deck.classList.add('hidden');
   layers.forEach((l) => l.root.classList.remove('is-front'));
   el.placeholder.classList.remove('hidden');

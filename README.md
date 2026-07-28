@@ -127,8 +127,13 @@ no configuration.
   admin page polls `/api/submissions`, and the phone polls `/api/status/:id` after
   submitting. No WebSockets to keep the moving parts down.
 - **The screen rotates every 8 seconds** with a fade, and holds its place when the
-  queue changes underneath it rather than jumping back to the first photo. Upcoming
-  photos are preloaded so a fade never reveals a half-loaded image.
+  queue changes underneath it rather than jumping back to the first photo.
+- **A photo and its caption always appear together.** The incoming photo and text
+  are staged in the hidden layer, and the crossfade only starts once the image has
+  decoded — otherwise the caption lands first and the frame sits empty for a beat.
+  Upcoming photos are preloaded so that wait is usually zero. A photo that fails or
+  stalls past 6s is shown anyway: a wall frozen on one bad image is worse than one
+  that shows it late.
 - **The frame scales to fill the TV.** Its height depends on how far the name and
   message wrap, so it can't be derived from the viewport alone: the screen
   measures the laid-out frame at a known `--u` and scales from there. Every
