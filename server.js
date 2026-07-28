@@ -125,6 +125,26 @@ app.get('/api/qr', async (req, res, next) => {
   }
 });
 
+app.get('/api/wall', async (req, res, next) => {
+  try {
+    res.json(await store.getWall());
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post('/api/wall', async (req, res, next) => {
+  try {
+    const { mode } = req.body || {};
+    if (!store.WALL_MODES.includes(mode)) {
+      return res.status(400).json({ error: `mode must be one of ${store.WALL_MODES.join(', ')}` });
+    }
+    res.json(await store.setWall(mode));
+  } catch (err) {
+    next(err);
+  }
+});
+
 app.get('/api/health', async (req, res) => {
   res.json({ ok: true, storage: store.describe(), cloud: store.isCloud });
 });

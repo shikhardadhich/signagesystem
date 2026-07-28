@@ -53,6 +53,19 @@ function newSubmission(name, message) {
   };
 }
 
+/**
+ * How the display screen behaves.
+ *   loop — rotate through every approved photo (the default).
+ *   live — stop rotating and show only photos approved after liveSince, so the
+ *          wall stands by for new arrivals instead of replaying the backlog.
+ */
+const DEFAULT_WALL = { mode: 'loop', liveSince: null };
+const WALL_MODES = ['loop', 'live'];
+
+function nextWall(mode) {
+  return { mode, liveSince: mode === 'live' ? Date.now() : null };
+}
+
 /* --------------------------------------------------------------- local -- */
 
 function localDriver() {
@@ -73,8 +86,17 @@ function localDriver() {
     writable = false;
   }
 
+  let wall = { ...DEFAULT_WALL };
+
   return {
     name: 'local',
+    async getWall() {
+      return { ...wall };
+    },
+    async setWall(mode) {
+      wall = nextWall(mode);
+      return { ...wall };
+    },
     async add(name, message, file) {
       if (!writable) {
         const err = new Error(
@@ -125,8 +147,19 @@ function firebaseDriver() {
   const bucket = admin.storage().bucket();
   const COLLECTION = 'submissions';
 
+  const wallRef = db.collection('settings').doc('wall');
+
   return {
     name: 'firebase',
+    async getWall() {
+      const doc = await wallRef.get();
+      return doc.exists ? { ...DEFAULT_WALL, ...doc.data() } : { ...DEFAULT_WALL };
+    },
+    async setWall(mode) {
+      const wall = nextWall(mode);
+      await wallRef.set(wall);
+      return wall;
+    },
     async add(name, message, file) {
       const submission = newSubmission(name, message);
       const objectPath = `selfies/${submission.id}${extensionFor(file)}`;
@@ -234,10 +267,30 @@ function vercelDriver() {
     return records.filter(Boolean);
   }
 
+  const WALL_KEY = 'selfiewall:wall';
+  const WALL_BLOB = 'wall.json';
+
   return {
     name: 'vercel',
     get access() {
       return access;
+    },
+    async getWall() {
+      const stored = redis ? await redis.get(WALL_KEY) : await readBlobJson(WALL_BLOB);
+      return stored ? { ...DEFAULT_WALL, ...stored } : { ...DEFAULT_WALL };
+    },
+    async setWall(mode) {
+      const wall = nextWall(mode);
+      if (redis) await redis.set(WALL_KEY, wall);
+      else {
+        await putBlob(WALL_BLOB, JSON.stringify(wall), {
+          contentType: 'application/json',
+          addRandomSuffix: false,
+          allowOverwrite: true,
+          cacheControlMaxAge: 0,
+        });
+      }
+      return wall;
     },
     async add(name, message, file) {
       const submission = newSubmission(name, message);
@@ -320,6 +373,7 @@ store.describe = () => {
 };
 
 store.isCloud = store.name !== 'local';
+store.WALL_MODES = WALL_MODES;
 store.UPLOAD_DIR = UPLOAD_DIR;
 
 module.exports = store;

@@ -245,6 +245,56 @@
   .badge[data-status="approved"] { background: rgba(78, 125, 63, 0.15); color: var(--ok); }
   .badge[data-status="rejected"] { background: rgba(162, 69, 47, 0.15); color: var(--bad); }
 
+  /* ---- wall mode control ---- */
+
+  .wall {
+    background: #fff;
+    border: 1px solid var(--cream-deep);
+    border-radius: var(--r-md);
+    padding: 1rem;
+    box-shadow: var(--shadow-card);
+    margin-bottom: var(--s5);
+  }
+
+  .wall__modes {
+    display: flex;
+    gap: var(--s2);
+    margin-bottom: var(--s3);
+  }
+
+  .wall__btn {
+    flex: 1;
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 700;
+    padding: 0.6rem 0.5rem;
+    border: 1px solid var(--cream-deep);
+    border-radius: var(--r-sm);
+    background: #fff;
+    color: var(--mocha);
+    cursor: pointer;
+    min-height: 44px;
+    transition: background var(--fast) var(--ease), color var(--fast) var(--ease),
+      border-color var(--fast) var(--ease);
+  }
+
+  .wall__btn:hover:not([aria-pressed="true"]) {
+    border-color: var(--gold);
+  }
+
+  .wall__btn[aria-pressed="true"] {
+    background: var(--coffee);
+    border-color: var(--coffee);
+    color: var(--cream);
+  }
+
+  .wall__hint {
+    margin: 0;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    color: var(--muted);
+  }
+
   /* ---- queue sidebar ---- */
 
   .queue {
@@ -333,10 +383,18 @@
     <div id="list" aria-live="polite"></div>
   </section>
 
-  <aside class="queue">
+  <aside>
+  <section class="wall">
+    <h2>Wall mode</h2>
+    <div class="wall__modes" id="wall-modes"></div>
+    <p class="wall__hint" id="wall-hint"></p>
+  </section>
+
+  <div class="queue">
     <h2>On the wall <span class="count" id="queue-count">0</span></h2>
     <ol id="queue"></ol>
     <p class="empty hidden" id="queue-empty">Nothing approved yet.</p>
+  </div>
   </aside>
 </main>
 
@@ -353,16 +411,19 @@ const FILTERS = [
 
 let filter = 'pending';
 let submissions = [];
+let wall = { mode: 'loop', liveSince: null };
 /* Ids the moderator just decided on, so a click updates instantly instead of
    waiting up to 3s for the next poll to catch up. */
 const pendingDecisions = new Map();
 
 async function refresh() {
   try {
-    const [subs, queue] = await Promise.all([
+    const [subs, queue, wallState] = await Promise.all([
       fetch('/api/submissions').then((r) => r.json()),
       fetch('/api/queue').then((r) => r.json()),
+      fetch('/api/wall').then((r) => r.json()),
     ]);
+    wall = wallState;
     // Drop optimistic entries the server has now confirmed.
     for (const s of subs) {
       if (pendingDecisions.get(s.id) === s.status) pendingDecisions.delete(s.id);
@@ -372,6 +433,7 @@ async function refresh() {
     );
     render();
     renderQueue(queue);
+    renderWall();
   } catch (err) {
     /* Leave the last good render on screen and retry next tick. */
   }
@@ -498,6 +560,47 @@ function renderQueue(queue) {
     li.append(img, span);
     ol.append(li);
   }
+}
+
+const WALL_MODES = [
+  { key: 'loop', label: 'Looping' },
+  { key: 'live', label: 'Live' },
+];
+
+function renderWall() {
+  const box = $('wall-modes');
+  box.innerHTML = '';
+  for (const m of WALL_MODES) {
+    const btn = document.createElement('button');
+    btn.className = 'wall__btn';
+    btn.type = 'button';
+    btn.textContent = m.label;
+    btn.setAttribute('aria-pressed', String(m.key === wall.mode));
+    btn.addEventListener('click', () => setWallMode(m.key));
+    box.append(btn);
+  }
+
+  const since = wall.liveSince ? new Date(wall.liveSince).toLocaleTimeString() : null;
+  $('wall-hint').textContent =
+    wall.mode === 'live'
+      ? `Rotation stopped. Only photos approved after ${since} reach the wall — the newest one holds the screen.`
+      : 'The wall cycles every approved photo, one every 8 seconds.';
+}
+
+async function setWallMode(mode) {
+  if (mode === wall.mode) return;
+  wall = { mode, liveSince: mode === 'live' ? Date.now() : null };
+  renderWall();
+  try {
+    wall = await fetch('/api/wall', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode }),
+    }).then((r) => r.json());
+  } catch (err) {
+    /* The next poll reconciles. */
+  }
+  renderWall();
 }
 
 async function decide(id, action) {

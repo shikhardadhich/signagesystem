@@ -275,6 +275,8 @@ const el = {
   counter: document.getElementById('counter'),
   progress: document.getElementById('progress'),
   offline: document.getElementById('offline'),
+  title: document.querySelector('.placeholder__title'),
+  sub: document.querySelector('.placeholder__sub'),
 };
 
 const layers = [...document.querySelectorAll('.layer')].map((root) => ({
@@ -284,11 +286,13 @@ const layers = [...document.querySelectorAll('.layer')].map((root) => ({
   message: root.querySelector('.template__message'),
 }));
 
-let queue = [];
+let queue = [];        // what the wall is currently cycling (mode-filtered)
 let index = 0;
 let front = 0;
 let rotateTimer = null;
 let failures = 0;
+let wall = { mode: 'loop', liveSince: null };
+let lastMode = 'loop';
 
 /* ---- QR code ---- */
 
@@ -306,17 +310,44 @@ const signature = (list) => list.map((s) => s.id).join(',');
 
 async function poll() {
   try {
-    const res = await fetch('/api/queue');
-    if (!res.ok) throw new Error(res.status);
-    const next = await res.json();
+    const [qRes, wRes] = await Promise.all([fetch('/api/queue'), fetch('/api/wall')]);
+    if (!qRes.ok || !wRes.ok) throw new Error('poll failed');
+    const approved = await qRes.json();
+    wall = await wRes.json();
     failures = 0;
     el.offline.classList.add('hidden');
-    if (signature(next) !== signature(queue)) applyQueue(next);
+
+    const next = eligible(approved);
+    // A mode switch has to re-seat the wall even when the photo list is
+    // unchanged — otherwise going back to loop would leave rotation stopped.
+    const switched = wall.mode !== lastMode;
+    lastMode = wall.mode;
+    if (switched) {
+      queue = [];
+      index = 0;
+      applyQueue(next);
+    } else if (signature(next) !== signature(queue)) {
+      applyQueue(next);
+    } else {
+      updateCounter();
+    }
   } catch (err) {
     // Keep showing the last known queue; only flag a sustained outage.
     failures += 1;
     if (failures >= OFFLINE_AFTER) el.offline.classList.remove('hidden');
   }
+}
+
+/**
+ * In live mode the wall stops replaying the backlog: only photos approved
+ * after the switch are eligible, newest last, and rotation stays off so the
+ * most recent arrival simply holds the screen.
+ */
+function eligible(approved) {
+  if (wall.mode !== 'live') return approved;
+  const since = wall.liveSince || 0;
+  const fresh = approved.filter((s) => (s.decidedAt || 0) > since);
+  return fresh.length ? [fresh[fresh.length - 1]] : [];
 }
 
 function applyQueue(next) {
@@ -330,6 +361,14 @@ function applyQueue(next) {
     index = 0;
     stopRotation();
     showEmpty();
+    return;
+  }
+
+  if (wall.mode === 'live') {
+    // Newest arrival takes the screen and holds it; nothing cycles.
+    index = 0;
+    stopRotation();
+    show(0, { instant: wasEmpty });
     return;
   }
 
@@ -349,6 +388,7 @@ function applyQueue(next) {
 
 function startRotation() {
   stopRotation();
+  if (wall.mode === 'live') return;
   restartProgress();
   if (queue.length > 1) rotateTimer = setInterval(advance, ROTATE_MS);
 }
@@ -407,10 +447,17 @@ function showEmpty() {
   layers.forEach((l) => l.root.classList.remove('is-front'));
   el.placeholder.classList.remove('hidden');
   el.counter.textContent = '';
+  const live = wall.mode === 'live';
+  el.title.textContent = live ? 'Ready for your selfie!' : 'Scan QR to be featured!';
+  el.sub.textContent = live
+    ? 'The wall is waiting — the next approved photo goes straight up here.'
+    : "Snap a selfie, add your name, and you'll appear right here on the wall.";
 }
 
 function updateCounter() {
-  el.counter.textContent = queue.length ? `${index + 1} of ${queue.length} on the wall` : '';
+  if (!queue.length) return void (el.counter.textContent = '');
+  el.counter.textContent =
+    wall.mode === 'live' ? 'Live — showing the latest photo' : `${index + 1} of ${queue.length} on the wall`;
 }
 
 showEmpty();

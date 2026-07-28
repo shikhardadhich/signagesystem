@@ -129,6 +129,11 @@ no configuration.
 - **The screen rotates every 8 seconds** with a fade, and holds its place when the
   queue changes underneath it rather than jumping back to the first photo. Upcoming
   photos are preloaded so a fade never reveals a half-loaded image.
+- **Two wall modes, switched from the admin page.** *Looping* cycles every approved
+  photo. *Live* stops rotating and shows only photos approved after the switch, so
+  the wall stands by on a "Ready for your selfie!" screen and puts each new arrival
+  straight up. The mode lives in the store, not the page, so the TV picks it up on
+  its next poll and it survives a refresh or a cold start.
 - **One template, two sizes.** The branded frame in `theme.css` sizes every border,
   gap, and font off a single `--u` length, so the phone's live preview is the same
   markup as the TV — customers see exactly what will appear on the wall.
@@ -144,6 +149,8 @@ no configuration.
 | POST | `/api/submissions/:id/approve` | Mark approved |
 | POST | `/api/submissions/:id/reject` | Mark rejected |
 | GET | `/api/qr` | QR code for the upload page, as a data URL |
+| GET | `/api/wall` | Current wall mode (`loop` or `live`) |
+| POST | `/api/wall` | Switch wall mode: `{ "mode": "loop" \| "live" }` |
 | GET | `/api/health` | Which storage driver is active |
 | GET | `/api/photo/:id` | Streams a photo from a private Blob store (unused on public stores) |
 
