@@ -11,35 +11,39 @@
   }
 
   body {
-    background:
-      radial-gradient(ellipse at 50% 0%, #4a2e1b 0%, transparent 60%),
-      linear-gradient(180deg, var(--coffee) 0%, var(--espresso) 100%);
+    background: #1b1109 url("assets/wall.jpg") center / cover no-repeat;
     color: var(--cream);
     display: flex;
     flex-direction: column;
   }
 
-  /* Subtle woodgrain-ish texture so the TV isn't a flat wash of brown. */
+  /* Darken the generated wall so the lamp hotspots never fight the artwork. */
   body::before {
     content: "";
     position: fixed;
     inset: 0;
-    background-image: repeating-linear-gradient(
-      92deg,
-      rgba(255, 255, 255, 0.018) 0px,
-      rgba(255, 255, 255, 0.018) 2px,
-      transparent 2px,
-      transparent 9px
-    );
+    background:
+      radial-gradient(ellipse at 50% 45%, transparent 20%, rgba(12, 7, 4, 0.72) 100%),
+      rgba(20, 12, 7, 0.35);
     pointer-events: none;
   }
 
   header {
     flex: none;
-    text-align: center;
-    padding: 2.4vh 0 1.8vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2vh;
+    padding: 2.2vh 0 1.7vh;
     border-bottom: 2px solid rgba(201, 151, 63, 0.35);
-    background: rgba(0, 0, 0, 0.18);
+    background: rgba(0, 0, 0, 0.32);
+    position: relative;
+  }
+
+  .crest {
+    width: 8.4vh;
+    height: 8.4vh;
+    flex: none;
   }
 
   .brand {
@@ -72,19 +76,16 @@
     min-height: 0;
   }
 
+  /* --u is one pixel of assets/frame.png; 1vh/9.8 makes the framed photo about
+     600px wide on a 1080p panel. */
   #frame {
-    --u: calc(1vh / 10.8); /* == 1px on a 1080p screen, and scales from there */
-    width: 56vh;
+    --u: calc(1vh / 9.8);
     opacity: 1;
     transition: opacity 0.9s ease;
   }
 
   #frame.is-fading {
     opacity: 0;
-  }
-
-  .template__photo {
-    aspect-ratio: 4 / 5;
   }
 
   /* ---- empty state ---- */
@@ -95,8 +96,8 @@
   }
 
   .placeholder__cup {
-    font-size: 12vh;
-    line-height: 1;
+    width: 22vh;
+    height: 22vh;
     filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.5));
   }
 
@@ -175,8 +176,11 @@
 <body>
 
 <header>
-  <h1 class="brand">The Brew House <em>—</em> Selfie Wall</h1>
-  <p class="tagline">Freshly brewed &amp; freshly posted</p>
+  <img class="crest" src="assets/emblem.png" alt="">
+  <div>
+    <h1 class="brand">The Brew House <em>—</em> Selfie Wall</h1>
+    <p class="tagline">Freshly brewed &amp; freshly posted</p>
+  </div>
 </header>
 
 <main class="stage">
@@ -188,7 +192,7 @@
   </div>
 
   <div id="placeholder" class="placeholder">
-    <div class="placeholder__cup">☕</div>
+    <img class="placeholder__cup" src="assets/emblem.png" alt="">
     <h2 class="placeholder__title">Scan QR to be featured!</h2>
     <p class="placeholder__sub">Snap a selfie, add your name, and you'll appear right here on the wall.</p>
   </div>

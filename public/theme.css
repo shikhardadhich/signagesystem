@@ -35,39 +35,40 @@ body {
 
 /* ---- The branded photo template, shared by the screen and the phone preview.
    Every dimension is a multiple of --u, so overriding that one length renders
-   the same markup at TV size or at thumbnail size. ---- */
+   the same markup at TV size or at thumbnail size.
+
+   The carved frame is assets/frame.png (generated art, 548x731 with the white
+   surround and the centre opening keyed to transparent) applied as a
+   border-image. Units below are that file's own pixels: at --u: 1px the frame
+   renders at its native size, so the border slices never distort. ---- */
 
 .template {
   --u: 1px;
+  width: calc(548 * var(--u));
+  padding: calc(12 * var(--u));
+  border-style: solid;
+  border-width: calc(93 * var(--u)) calc(96 * var(--u)) calc(97 * var(--u)) calc(96 * var(--u));
+  border-image-source: url("assets/frame.png");
+  border-image-slice: 93 96 97 96;
+  border-image-repeat: stretch;
+  /* Keep the cream mount inside the opening — it must not paint under the
+     frame's transparent outer corners. */
   background: linear-gradient(160deg, var(--cream) 0%, var(--cream-deep) 100%);
-  border: calc(6 * var(--u)) solid var(--gold);
-  border-radius: calc(10 * var(--u));
-  padding: calc(22 * var(--u));
-  box-shadow:
-    0 0 0 calc(3 * var(--u)) var(--coffee),
-    0 calc(24 * var(--u)) calc(60 * var(--u)) rgba(0, 0, 0, 0.45);
+  background-clip: padding-box;
+  /* drop-shadow follows the frame's alpha silhouette; box-shadow would trace a
+     rectangle around the ornate corners instead. */
+  filter: drop-shadow(0 calc(10 * var(--u)) calc(22 * var(--u)) rgba(0, 0, 0, 0.55));
   position: relative;
   text-align: center;
-}
-
-/* Decorative inner hairline border. */
-.template::after {
-  content: "";
-  position: absolute;
-  inset: calc(9 * var(--u));
-  border: calc(1 * var(--u)) solid var(--caramel);
-  border-radius: calc(4 * var(--u));
-  opacity: 0.55;
-  pointer-events: none;
 }
 
 .template__photo {
   display: block;
   width: 100%;
+  aspect-ratio: 4 / 5;
   object-fit: cover;
   background: var(--cream-deep);
   border: calc(2 * var(--u)) solid var(--coffee);
-  border-radius: calc(3 * var(--u));
 }
 
 .template__rule {

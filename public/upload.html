@@ -25,6 +25,12 @@
     margin-bottom: 1.5rem;
   }
 
+  .crest {
+    width: 62px;
+    height: 62px;
+    margin-bottom: 0.4rem;
+  }
+
   .brand {
     font-family: var(--serif);
     font-size: 1.6rem;
@@ -133,14 +139,10 @@
     margin: 0 0 0.75rem;
   }
 
+  /* Same frame artwork as the TV, at 0.42 of its native pixel size. */
   #preview-frame {
-    --u: 0.45px;
-    width: 210px;
+    --u: 0.42px;
     margin: 0 auto;
-  }
-
-  #preview-frame .template__photo {
-    aspect-ratio: 4 / 5;
   }
 
   .btn--primary {
@@ -219,6 +221,7 @@
 <div class="wrap">
 
   <header>
+    <img class="crest" src="assets/emblem.png" alt="">
     <h1 class="brand">The Brew House <em>—</em> Selfie Wall</h1>
     <p class="tagline">Get on the big screen</p>
   </header>
