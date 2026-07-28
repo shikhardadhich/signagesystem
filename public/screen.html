@@ -774,16 +774,10 @@ function renderMenu(m) {
 
     const shot = document.createElement('div');
     shot.className = 'item__shot';
-    if (it.image) {
-      const img = document.createElement('img');
-      img.src = it.image;
-      img.alt = it.name;
-      // Fall back to the crest if no photo has been dropped in yet.
-      img.addEventListener('error', () => shot.replaceChildren(placeholder()), { once: true });
-      shot.append(img);
-    } else {
-      shot.append(placeholder());
-    }
+    // Try the photograph first, then the line-art stand-in, then the crest.
+    // Dropping a real photo into assets/menu/ therefore needs no config change,
+    // and a missing file can never leave a blank slot on the wall.
+    shot.append(imageChain([it.image, it.fallback], it.name));
 
     const name = document.createElement('p');
     name.className = 'item__name';
@@ -813,6 +807,26 @@ function renderMenu(m) {
     li.append(n, t, d);
     return li;
   }));
+}
+
+/** An <img> that walks a list of sources, falling back to the crest. */
+function imageChain(sources, alt) {
+  const queue = sources.filter(Boolean);
+  if (!queue.length) return placeholder();
+
+  const img = document.createElement('img');
+  img.alt = alt || '';
+  let i = 0;
+  const attempt = () => {
+    if (i < queue.length) {
+      img.src = queue[i++];
+    } else {
+      img.replaceWith(placeholder());
+    }
+  };
+  img.addEventListener('error', attempt);
+  attempt();
+  return img;
 }
 
 function placeholder() {

@@ -8,25 +8,29 @@
       "name": "Cappuccino",
       "description": "Smooth, balanced and perfectly brewed.",
       "price": "₹160",
-      "image": "assets/menu/cappuccino.svg"
+      "image": "assets/menu/cappuccino.jpg",
+      "fallback": "assets/menu/cappuccino.svg"
     },
     {
       "name": "Iced Latte",
       "description": "Chilled, creamy and always refreshing.",
       "price": "₹170",
-      "image": "assets/menu/iced-latte.svg"
+      "image": "assets/menu/iced-latte.jpg",
+      "fallback": "assets/menu/iced-latte.svg"
     },
     {
       "name": "Chocolate Cake",
       "description": "Rich, moist and made to indulge.",
       "price": "₹140",
-      "image": "assets/menu/chocolate-cake.svg"
+      "image": "assets/menu/chocolate-cake.jpg",
+      "fallback": "assets/menu/chocolate-cake.svg"
     },
     {
       "name": "Butter Croissant",
       "description": "Flaky, buttery and baked fresh daily.",
       "price": "₹120",
-      "image": "assets/menu/butter-croissant.svg"
+      "image": "assets/menu/butter-croissant.jpg",
+      "fallback": "assets/menu/butter-croissant.svg"
     }
   ],
   "banner": {
