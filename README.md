@@ -90,6 +90,13 @@ Hosting serves `public/` and rewrites the rest to the Express app in
    - `KV_REST_API_URL` and `KV_REST_API_TOKEN`
 3. **Redeploy** so the function picks up the new variables.
 
+The rewrite deliberately sends **every** path to `/api`, including `/api/*`.
+Vercel's filesystem routing exposes `api/index.js` at `/api` only — there is no
+implicit catch-all — so excluding `/api/*` from the rewrite (for example with a
+`(?!api/)` lookahead) makes every endpoint 404 while the pages still render.
+Static files under `public/` are matched before rewrites, so they keep coming
+from the CDN.
+
 ### Either way
 
 Until a backend is connected the deployment still renders all three pages, and
