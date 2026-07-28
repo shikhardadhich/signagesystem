@@ -180,9 +180,10 @@ no configuration.
   image's own dimensions, so a portrait selfie and a landscape one both fill
   their frame without being cropped — no face loses its top to a fixed shape.
 - **The board is edited, not coded.** `public/menu.json` holds the cafe name,
-  tagline, signature items with prices, the banner and the QR panel copy. Drop
-  photos at the paths named there (`public/assets/menu/…`); anything missing
-  falls back to the crest, so the board never looks broken.
+  tagline, signature items with prices, the banner and the QR panel copy. The
+  items ship as gold line-art SVGs in `public/assets/menu/`; point an item's
+  `image` at a photograph to replace one, and anything missing falls back to the
+  crest so the board never looks broken.
 - **A photo and its caption always appear together.** The incoming photo and text
   are staged in the hidden layer, and the crossfade only starts once the image has
   decoded — otherwise the caption lands first and the frame sits empty for a beat.

@@ -8,25 +8,25 @@
       "name": "Cappuccino",
       "description": "Smooth, balanced and perfectly brewed.",
       "price": "₹160",
-      "image": "assets/menu/cappuccino.jpg"
+      "image": "assets/menu/cappuccino.svg"
     },
     {
       "name": "Iced Latte",
       "description": "Chilled, creamy and always refreshing.",
       "price": "₹170",
-      "image": "assets/menu/iced-latte.jpg"
+      "image": "assets/menu/iced-latte.svg"
     },
     {
       "name": "Chocolate Cake",
       "description": "Rich, moist and made to indulge.",
       "price": "₹140",
-      "image": "assets/menu/chocolate-cake.jpg"
+      "image": "assets/menu/chocolate-cake.svg"
     },
     {
       "name": "Butter Croissant",
       "description": "Flaky, buttery and baked fresh daily.",
       "price": "₹120",
-      "image": "assets/menu/butter-croissant.jpg"
+      "image": "assets/menu/butter-croissant.svg"
     }
   ],
   "banner": {
@@ -38,9 +38,18 @@
     "title": "Our Wall!",
     "subtitle": "Scan to upload your selfie",
     "steps": [
-      { "title": "Scan", "detail": "the QR code" },
-      { "title": "Take", "detail": "a selfie" },
-      { "title": "See yourself", "detail": "on our wall" }
+      {
+        "title": "Scan",
+        "detail": "the QR code"
+      },
+      {
+        "title": "Take",
+        "detail": "a selfie"
+      },
+      {
+        "title": "See yourself",
+        "detail": "on our wall"
+      }
     ]
   }
 }
