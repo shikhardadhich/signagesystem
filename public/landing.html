@@ -117,6 +117,18 @@ img { max-width: 100%; display: block; }
   box-shadow: 0 8px 22px rgba(201, 151, 63, 0.35);
 }
 
+/* Staff sign-in is deliberately quiet next to Book a Demo: the people who
+   need it know it is there, and it is not what this page is selling. */
+.nav__signin {
+  color: rgba(247, 239, 225, 0.72);
+  text-decoration: none;
+  font-size: 0.92rem;
+  flex: none;
+  transition: color var(--fast) var(--ease);
+}
+
+.nav__signin:hover { color: var(--gold-light); }
+
 .nav__burger {
   display: none;
   margin-left: auto;
@@ -590,6 +602,7 @@ img { max-width: 100%; display: block; }
   .nav__links { display: none; }
   .nav__burger { display: block; }
   .nav__inner .cta { margin-left: 1rem; }
+  .nav__signin { margin-left: auto; }
 
   .hero__inner { grid-template-columns: 1fr; gap: 0; padding-top: 3rem; }
   .hero__copy { padding-bottom: 2.5rem; }
@@ -619,7 +632,7 @@ img { max-width: 100%; display: block; }
 <!-- ================================================================ nav -->
 <header class="nav">
   <div class="shell nav__inner">
-    <a class="logo" href="/landing.html">
+    <a class="logo" href="/">
       <svg width="30" height="30" viewBox="0 0 32 32" fill="none" aria-hidden="true">
         <rect x="1.5" y="1.5" width="16" height="16" rx="3" stroke="currentColor" stroke-width="2.4"/>
         <rect x="14.5" y="14.5" width="16" height="16" rx="3" stroke="currentColor" stroke-width="2.4"/>
@@ -635,6 +648,7 @@ img { max-width: 100%; display: block; }
       <a href="#why">Resources</a>
     </nav>
 
+    <a class="nav__signin" href="/login">Sign in</a>
     <button class="nav__burger" type="button" aria-label="Menu">☰</button>
     <a class="cta" href="#demos">Book a Demo</a>
   </div>

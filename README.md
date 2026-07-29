@@ -18,10 +18,16 @@ npm start
 | --- | --- | --- | --- |
 | Display screen | `/<cafe>` | The cafe TV, fullscreen kiosk mode | No |
 | Upload | `/<cafe>/upload` | The customer's phone, opened via QR | No |
-| Sign in | `/` | Staff laptop or tablet | — |
+| Marketing site | `/` | Anyone | No |
+| Sign in | `/login` | Staff laptop or tablet | — |
 | Cafes and accounts | `/admin/cafes` | Owner | Yes |
 | Moderation | `/admin/<cafe>` | Staff | Yes |
 | Menu board editor | `/admin/<cafe>/board` | Staff | Yes |
+
+The bare domain is the marketing page, signed in or not: whoever lands there is
+far likelier to be a visitor than a barista, and staff with a session are one
+click from `/admin`. A URL that isn't a known cafe lands there too, since the
+usual cause is a typo in an address read off a sticky note.
 
 The display is deliberately public. A kiosk browser that lost its session
 overnight would greet a room full of customers with a login box and nobody there
@@ -62,7 +68,7 @@ There are two roles:
 
 **Getting the first owner in.** Create a user in the Supabase dashboard
 (*Authentication → Users → Add user*, with "auto confirm" on), then sign in at
-`/`. The first account to sign in becomes the owner — somebody has to be, and
+`/login`. The first account to sign in becomes the owner — somebody has to be, and
 the alternative is no owner existing to promote anyone. From there, add cafes
 and staff from `/admin/cafes`.
 
@@ -207,7 +213,7 @@ cafe on local disk with no sign-in.
      not used by this app and won't work here.
 4. Redeploy.
 5. Create your first user in *Authentication → Users → Add user* (auto-confirm
-   on), then sign in at `/`. The first account to sign in becomes the owner.
+   on), then sign in at `/login`. The first account to sign in becomes the owner.
 
 The secret key must stay server-side — it bypasses row-level security, and the
 browser never sees it. Keep it in the host's environment variables: never in the
@@ -431,6 +437,7 @@ public/menu.json   board content: items, prices, copy — edit this, not the HTM
 public/theme.css   shared cafe palette + the branded photo frame
 public/admin.css   shared chrome for the signed-in pages
 public/admin-shell.js  session, header and API helper shared by those pages
+public/landing.html  the marketing page served at /
 public/login.html  staff sign-in
 public/cafes.html  owner console: cafes and accounts
 public/board.html  menu board editor

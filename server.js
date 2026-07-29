@@ -401,9 +401,15 @@ app.post(
 
 /* ---------------------------------------------------------------- pages -- */
 
-app.get('/', (req, res) => {
-  if (req.profile) return res.redirect('/admin');
-  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+/* The front door is the marketing page, signed in or not. Someone who arrives
+   at the bare domain is far more likely to be a visitor than a barista, and a
+   staff member with a session is one click from /admin anyway. */
+app.get('/', page('landing.html'));
+
+app.get('/login', (req, res, next) => {
+  if (!req.profile) return res.sendFile(path.join(__dirname, 'public', 'login.html'));
+  // Already signed in: skip the form and go where signing in would have sent them.
+  landingFor(req.profile).then((target) => res.redirect(target)).catch(next);
 });
 
 /** Owners choose a cafe; staff only ever have one, so skip the choosing. */
@@ -452,8 +458,8 @@ for (const [legacy, suffix] of [['/screen', ''], ['/upload', '/upload']]) {
 
 /**
  * The public screen and phone page, last so they cannot shadow anything above.
- * An unknown cafe gets the landing page rather than a bare 404: the usual cause
- * is a typo in a URL somebody read off a sticky note.
+ * An unknown cafe gets the marketing page rather than a bare 404: the usual
+ * cause is a typo in a URL somebody read off a sticky note.
  */
 app.get('/:cafeId', publicCafePage('screen.html'));
 app.get('/:cafeId/upload', publicCafePage('upload.html'));
@@ -464,7 +470,7 @@ function publicCafePage(file) {
     if (cafes.RESERVED.has(cafeId)) return next();
     try {
       if (!(await cafes.get(cafeId))) {
-        return res.status(404).sendFile(path.join(__dirname, 'public', 'login.html'));
+        return res.status(404).sendFile(path.join(__dirname, 'public', 'landing.html'));
       }
       res.sendFile(path.join(__dirname, 'public', file));
     } catch (err) {

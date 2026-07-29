@@ -33,7 +33,7 @@ export async function api(url, options = {}) {
   if (res.status === 401) {
     // Session gone — bounce to sign-in rather than letting the page sit there
     // silently failing every poll.
-    location.href = `/?next=${encodeURIComponent(location.pathname)}`;
+    location.href = `/login?next=${encodeURIComponent(location.pathname)}`;
     throw new Error('Signed out');
   }
 
@@ -58,7 +58,7 @@ export async function boot({ where = '', nav = [] } = {}) {
   try {
     me = await api('/api/auth/me');
   } catch (err) {
-    location.href = `/?next=${encodeURIComponent(location.pathname)}`;
+    location.href = `/login?next=${encodeURIComponent(location.pathname)}`;
     return new Promise(() => {});
   }
 
@@ -106,7 +106,9 @@ function renderNav(links) {
   out.textContent = 'Sign out';
   out.addEventListener('click', async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
-    location.href = '/';
+    // Back to sign-in, not the marketing page: someone signing out of a shift
+    // is usually handing the tablet to the next person.
+    location.href = '/login';
   });
   nav.append(out);
 }

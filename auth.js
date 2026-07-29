@@ -267,7 +267,7 @@ function requireCafe(req, res, next) {
 /** Page guard: send people to the sign-in page and back where they were going. */
 function requirePage(req, res, next) {
   if (req.profile) return next();
-  res.redirect(`/?next=${encodeURIComponent(req.originalUrl)}`);
+  res.redirect(`/login?next=${encodeURIComponent(req.originalUrl)}`);
 }
 
 function describe() {
