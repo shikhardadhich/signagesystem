@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Menu board — Selfie Wall</title>
+<base href="/">
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/admin.css">
+<style>
+  .cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+    gap: 2rem;
+    align-items: start;
+  }
+
+  @media (max-width: 900px) {
+    .cols { grid-template-columns: 1fr; }
+  }
+
+  /* ---- image picker ---- */
+
+  .pic {
+    display: flex;
+    gap: 0.8rem;
+    align-items: center;
+  }
+
+  .pic__preview {
+    width: 76px;
+    height: 76px;
+    flex: none;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--line);
+    background: var(--paper-deep);
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+  }
+
+  .pic__preview img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+
+  .pic__preview span {
+    font-size: 0.68rem;
+    color: var(--ink-soft);
+    text-align: center;
+    padding: 0.2rem;
+  }
+
+  .pic__side { flex: 1; min-width: 0; }
+
+  .pic__note {
+    font-size: 0.72rem;
+    color: var(--ink-soft);
+    margin: 0.35rem 0 0;
+    word-break: break-all;
+  }
+
+  input[type="file"] { display: none; }
+
+  /* ---- items ---- */
+
+  .item {
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    background: var(--card);
+    padding: 1rem;
+    margin-bottom: 0.85rem;
+    display: grid;
+    grid-template-columns: 96px minmax(0, 1fr) auto;
+    gap: 1rem;
+    align-items: start;
+  }
+
+  @media (max-width: 700px) {
+    .item { grid-template-columns: 1fr; }
+  }
+
+  .item__order {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .item__order .btn { padding: 0.25rem 0.5rem; font-size: 0.8rem; }
+
+  .steps .item { grid-template-columns: minmax(0, 1fr) auto; }
+
+  /* ---- sticky save bar ---- */
+
+  .bar {
+    position: sticky;
+    bottom: 0;
+    background: linear-gradient(180deg, rgba(253, 248, 239, 0) 0%, var(--cream) 45%);
+    padding: 1.2rem 0 0.9rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    align-items: center;
+    z-index: 5;
+  }
+
+  .bar__state {
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+    margin-left: auto;
+  }
+
+  .bar__state[data-dirty="1"] { color: var(--bad); font-weight: 600; }
+
+  .is-armed {
+    background: var(--bad) !important;
+    border-color: var(--bad) !important;
+    color: #fff !important;
+  }
+
+  .side .card { position: sticky; top: 1rem; }
+
+  .side ul { margin: 0.4rem 0 0; padding-left: 1.1rem; font-size: 0.83rem; color: var(--ink-soft); line-height: 1.7; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top__inner">
+    <h1 class="top__brand">Selfie Wall <span class="top__where" id="shell-where"></span></h1>
+    <nav class="top__nav" id="shell-nav"></nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="cols">
+    <form id="board">
+      <h2>Branding</h2>
+      <div class="card">
+        <div class="row2">
+          <div class="field">
+            <label for="f-name">Cafe name</label>
+            <input id="f-name" type="text" maxlength="60" data-path="name">
+          </div>
+          <div class="field">
+            <label for="f-established">Established</label>
+            <input id="f-established" type="text" maxlength="12" placeholder="2018" data-path="established">
+          </div>
+        </div>
+        <div class="field">
+          <label for="f-tagline">Tagline</label>
+          <input id="f-tagline" type="text" maxlength="120" data-path="tagline">
+        </div>
+        <div class="field">
+          <span class="label">Logo</span>
+          <div class="pic" data-pic="logo"></div>
+        </div>
+      </div>
+
+      <h2>Menu</h2>
+      <div class="card">
+        <div class="field">
+          <label for="f-sectionTitle">Section heading</label>
+          <input id="f-sectionTitle" type="text" maxlength="60" data-path="sectionTitle">
+        </div>
+        <div class="row2" style="margin-top:0.9rem">
+          <div class="field">
+            <label for="f-perPage">Items shown at once</label>
+            <input id="f-perPage" type="number" min="1" max="8" data-path="rotation.perPage" data-num>
+          </div>
+          <div class="field">
+            <label for="f-seconds">Seconds per page</label>
+            <input id="f-seconds" type="number" min="3" max="60" data-path="rotation.seconds" data-num>
+          </div>
+        </div>
+        <p class="hint" style="margin:0.6rem 0 0" id="rotation-note"></p>
+      </div>
+      <div id="items"></div>
+      <div class="actions-row">
+        <button class="btn" type="button" id="add-item">Add an item</button>
+        <span class="hint" style="margin:0" id="item-count"></span>
+      </div>
+
+      <h2 style="margin-top:var(--s6)">Bottom banner</h2>
+      <div class="card">
+        <div class="field">
+          <label for="f-banner-title">Title</label>
+          <input id="f-banner-title" type="text" maxlength="90" data-path="banner.title">
+        </div>
+        <div class="field">
+          <label for="f-banner-subtitle">Subtitle</label>
+          <input id="f-banner-subtitle" type="text" maxlength="140" data-path="banner.subtitle">
+        </div>
+      </div>
+
+      <h2 style="margin-top:var(--s6)">Selfie panel</h2>
+      <p class="hint">The right-hand panel beside the QR code.</p>
+      <div class="card">
+        <div class="row2">
+          <div class="field">
+            <label for="f-wall-kicker">Kicker</label>
+            <input id="f-wall-kicker" type="text" maxlength="40" data-path="wall.kicker">
+          </div>
+          <div class="field">
+            <label for="f-wall-title">Title</label>
+            <input id="f-wall-title" type="text" maxlength="40" data-path="wall.title">
+          </div>
+        </div>
+        <div class="field">
+          <label for="f-wall-subtitle">Subtitle</label>
+          <input id="f-wall-subtitle" type="text" maxlength="90" data-path="wall.subtitle">
+        </div>
+      </div>
+
+      <h2 style="margin-top:var(--s6)">How it works</h2>
+      <div class="steps" id="steps"></div>
+      <div class="actions-row">
+        <button class="btn" type="button" id="add-step">Add a step</button>
+        <span class="hint" style="margin:0" id="step-count"></span>
+      </div>
+
+      <div class="bar">
+        <button class="btn btn--primary" type="submit" id="save">Save the board</button>
+        <button class="btn btn--danger" type="button" id="reset">Reset to defaults</button>
+        <span class="bar__state" id="state">Loaded</span>
+      </div>
+    </form>
+
+    <aside class="side">
+      <div class="card">
+        <h2 style="font-size:1rem">This board</h2>
+        <p class="hint" style="margin:0" id="side-url"></p>
+        <ul>
+          <li>The screen picks up a save on its next poll — no need to touch the TV.</li>
+          <li>More items than fit on a page are dealt out in turn, a page at a time, so a long menu still gets seen.</li>
+          <li>Page turns pause while a selfie has the screen, so nothing cycles past unwatched.</li>
+          <li>A photo that fails to load falls back to the line art, then to the logo, so the board is never blank.</li>
+        </ul>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<script type="module">
+import { shell, api, boot, flash, arm } from '/admin-shell.js';
+
+const $ = (id) => document.getElementById(id);
+const cafeId = shell.cafeId || location.pathname.split('/')[2];
+
+await boot({
+  where: 'Menu board',
+  nav: [
+    { href: '/admin/cafes', label: 'Cafes', ownerOnly: true },
+    { href: `/admin/${cafeId}`, label: 'Moderation' },
+    { href: `/admin/${cafeId}/board`, label: 'Board' },
+    { href: `/${cafeId}`, label: 'Screen ↗', blank: true },
+  ],
+});
+
+$('side-url').textContent = `${location.origin}/${cafeId}`;
+
+/* The board is edited as one document and saved as one document: a screen that
+   showed half a rename because two fields saved separately would look broken to
+   a room full of customers. */
+let board = await api(`/api/cafes/${cafeId}/board`);
+let dirty = false;
+
+render();
+
+/* ---------------------------------------------------------------- paths -- */
+
+const get = (path) => path.split('.').reduce((o, k) => (o == null ? o : o[k]), board);
+
+function set(path, value) {
+  const keys = path.split('.');
+  const last = keys.pop();
+  let node = board;
+  for (const k of keys) node = (node[k] = node[k] || {});
+  node[last] = value;
+  markDirty();
+}
+
+function markDirty() {
+  dirty = true;
+  $('state').textContent = 'Unsaved changes';
+  $('state').dataset.dirty = '1';
+}
+
+function markClean(label = 'Saved') {
+  dirty = false;
+  $('state').textContent = label;
+  $('state').dataset.dirty = '0';
+}
+
+// The board is the screen's content, and losing a rewrite to a stray back
+// button is the kind of thing you only notice once it's gone.
+addEventListener('beforeunload', (e) => {
+  if (!dirty) return;
+  e.preventDefault();
+  e.returnValue = '';
+});
+
+/* --------------------------------------------------------------- render -- */
+
+function render() {
+  for (const input of document.querySelectorAll('[data-path]')) {
+    const value = get(input.dataset.path);
+    input.value = value == null ? '' : value;
+    input.oninput = () => {
+      set(input.dataset.path, 'num' in input.dataset ? Number(input.value) : input.value);
+      if ('num' in input.dataset) describeRotation();
+    };
+  }
+
+  renderPicker(document.querySelector('[data-pic="logo"]'), {
+    value: board.logo || '',
+    placeholder: 'No logo',
+    onChange: (url) => set('logo', url),
+  });
+
+  renderItems();
+  renderSteps();
+  describeRotation();
+}
+
+/**
+ * Spells out what the two numbers add up to on the actual screen. "4 items,
+ * 8 seconds" tells you nothing about whether the whole menu gets seen; "3
+ * pages, full cycle 24s" does.
+ */
+function describeRotation() {
+  const perPage = Math.max(1, Number(board.rotation?.perPage) || 4);
+  const seconds = Math.max(3, Number(board.rotation?.seconds) || 8);
+  const count = (board.items || []).filter((i) => i.name).length;
+  const pages = Math.max(1, Math.ceil(count / perPage));
+
+  $('rotation-note').textContent = pages < 2
+    ? `All ${count} item${count === 1 ? '' : 's'} fit on one page, so the menu stays still.`
+    : `${count} items across ${pages} pages — each page holds for ${seconds}s, ` +
+      `so the full menu cycles every ${pages * seconds}s.`;
+}
+
+function renderItems() {
+  board.items = board.items || [];
+  $('items').replaceChildren(...board.items.map((item, i) => itemRow(item, i)));
+  $('item-count').textContent = `${board.items.length} of 8`;
+  $('add-item').disabled = board.items.length >= 8;
+  describeRotation();
+}
+
+function itemRow(item, index) {
+  const box = document.createElement('div');
+  box.className = 'item';
+
+  const pic = document.createElement('div');
+  pic.className = 'pic';
+  pic.style.display = 'block';
+  renderPicker(pic, {
+    value: item.image || item.fallback || '',
+    placeholder: 'No photo',
+    compact: true,
+    onChange: (url) => { item.image = url; markDirty(); },
+  });
+
+  const fields = document.createElement('div');
+  fields.append(
+    field('Name', 'text', item.name, 60, (v) => { item.name = v; markDirty(); }),
+    twoUp(
+      field('Price', 'text', item.price, 20, (v) => { item.price = v; markDirty(); }),
+      field('Description', 'text', item.description, 140, (v) => { item.description = v; markDirty(); }),
+    ),
+  );
+
+  const order = document.createElement('div');
+  order.className = 'item__order';
+  order.append(
+    iconButton('↑', index === 0, () => move(board.items, index, -1, renderItems)),
+    iconButton('↓', index === board.items.length - 1, () => move(board.items, index, 1, renderItems)),
+    iconButton('✕', false, () => {
+      board.items.splice(index, 1);
+      markDirty();
+      renderItems();
+    }),
+  );
+
+  box.append(pic, fields, order);
+  return box;
+}
+
+function renderSteps() {
+  board.wall = board.wall || {};
+  board.wall.steps = board.wall.steps || [];
+  const steps = board.wall.steps;
+
+  $('steps').replaceChildren(...steps.map((step, i) => {
+    const box = document.createElement('div');
+    box.className = 'item';
+
+    const fields = document.createElement('div');
+    fields.append(twoUp(
+      field(`Step ${i + 1}`, 'text', step.title, 30, (v) => { step.title = v; markDirty(); }),
+      field('Detail', 'text', step.detail, 60, (v) => { step.detail = v; markDirty(); }),
+    ));
+
+    const order = document.createElement('div');
+    order.className = 'item__order';
+    order.append(
+      iconButton('↑', i === 0, () => move(steps, i, -1, renderSteps)),
+      iconButton('↓', i === steps.length - 1, () => move(steps, i, 1, renderSteps)),
+      iconButton('✕', false, () => { steps.splice(i, 1); markDirty(); renderSteps(); }),
+    );
+
+    box.append(fields, order);
+    return box;
+  }));
+
+  $('step-count').textContent = `${steps.length} of 4`;
+  $('add-step').disabled = steps.length >= 4;
+}
+
+/* -------------------------------------------------------------- widgets -- */
+
+function field(label, type, value, max, onInput) {
+  const wrap = document.createElement('div');
+  wrap.className = 'field';
+  const l = document.createElement('label');
+  l.textContent = label;
+  const input = document.createElement('input');
+  input.type = type;
+  input.maxLength = max;
+  input.value = value || '';
+  input.addEventListener('input', () => onInput(input.value));
+  const id = `f-${Math.random().toString(36).slice(2, 9)}`;
+  input.id = id;
+  l.htmlFor = id;
+  wrap.append(l, input);
+  return wrap;
+}
+
+function twoUp(a, b) {
+  const row = document.createElement('div');
+  row.className = 'row2';
+  row.style.marginTop = '0.9rem';
+  row.append(a, b);
+  return row;
+}
+
+function iconButton(glyph, disabled, onClick) {
+  const b = document.createElement('button');
+  b.className = 'btn btn--small';
+  b.type = 'button';
+  b.textContent = glyph;
+  b.disabled = disabled;
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+function move(list, index, delta, rerender) {
+  const to = index + delta;
+  if (to < 0 || to >= list.length) return;
+  [list[index], list[to]] = [list[to], list[index]];
+  markDirty();
+  rerender();
+}
+
+/**
+ * Upload-or-clear image control. The file goes to the server immediately rather
+ * than being held until save: the board stores a URL, so there is nothing
+ * meaningful to put in the field until the bytes have landed somewhere.
+ */
+function renderPicker(host, { value, placeholder, onChange, compact }) {
+  host.replaceChildren();
+  host.style.display = 'flex';
+
+  const preview = document.createElement('div');
+  preview.className = 'pic__preview';
+
+  const paint = (url) => {
+    preview.replaceChildren();
+    if (url) {
+      const img = document.createElement('img');
+      img.src = url;
+      img.alt = '';
+      img.addEventListener('error', () => {
+        preview.replaceChildren(Object.assign(document.createElement('span'), {
+          textContent: 'Missing',
+        }));
+      });
+      preview.append(img);
+    } else {
+      preview.append(Object.assign(document.createElement('span'), { textContent: placeholder }));
+    }
+  };
+  paint(value);
+
+  const side = document.createElement('div');
+  side.className = 'pic__side';
+
+  const file = document.createElement('input');
+  file.type = 'file';
+  file.accept = 'image/*';
+
+  const pick = document.createElement('button');
+  pick.className = 'btn btn--small';
+  pick.type = 'button';
+  pick.textContent = value ? 'Replace' : 'Upload';
+  pick.addEventListener('click', () => file.click());
+
+  const clear = document.createElement('button');
+  clear.className = 'btn btn--small';
+  clear.type = 'button';
+  clear.textContent = 'Clear';
+  clear.disabled = !value;
+  clear.addEventListener('click', () => {
+    onChange('');
+    renderPicker(host, { value: '', placeholder, onChange, compact });
+  });
+
+  const note = document.createElement('p');
+  note.className = 'pic__note';
+  note.textContent = value || '';
+
+  file.addEventListener('change', async () => {
+    const chosen = file.files[0];
+    if (!chosen) return;
+    pick.disabled = true;
+    pick.textContent = 'Uploading…';
+    try {
+      const body = new FormData();
+      body.append('image', chosen);
+      const { url } = await api(`/api/cafes/${cafeId}/board/image`, { method: 'POST', body });
+      onChange(url);
+      renderPicker(host, { value: url, placeholder, onChange, compact });
+      flash('Image uploaded.');
+    } catch (err) {
+      flash(err.message, 'bad');
+      pick.disabled = false;
+      pick.textContent = value ? 'Replace' : 'Upload';
+    }
+  });
+
+  const row = document.createElement('div');
+  row.className = 'actions-row';
+  row.append(pick, clear);
+  side.append(row, note, file);
+  host.append(preview, side);
+}
+
+/* ----------------------------------------------------------------- save -- */
+
+$('add-item').addEventListener('click', () => {
+  board.items.push({ name: '', description: '', price: '', image: '', fallback: '' });
+  markDirty();
+  renderItems();
+});
+
+$('add-step').addEventListener('click', () => {
+  board.wall.steps.push({ title: '', detail: '' });
+  markDirty();
+  renderSteps();
+});
+
+$('board').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('save').disabled = true;
+  $('save').textContent = 'Saving…';
+  try {
+    // The server normalises and trims; take back what it stored so the form
+    // shows exactly what the screen will render, not what was typed.
+    board = await api(`/api/cafes/${cafeId}/board`, { method: 'PUT', body: board });
+    render();
+    markClean();
+    flash('Board saved — the screen will pick it up shortly.');
+  } catch (err) {
+    flash(err.message, 'bad');
+  } finally {
+    $('save').disabled = false;
+    $('save').textContent = 'Save the board';
+  }
+});
+
+arm($('reset'), {
+  idleLabel: 'Reset to defaults',
+  armedLabel: 'Discard this board?',
+  onConfirm: async () => {
+    try {
+      board = await api(`/api/cafes/${cafeId}/board/reset`, { method: 'POST' });
+      render();
+      markClean('Reset');
+      flash('Board reset to the shipped defaults.');
+    } catch (err) {
+      flash(err.message, 'bad');
+    }
+  },
+});
+</script>
+</body>
+</html>

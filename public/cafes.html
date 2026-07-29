@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cafes — Selfie Wall</title>
+<base href="/">
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/admin.css">
+<style>
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 1rem;
+    margin-bottom: var(--s6);
+  }
+
+  .cafe {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    margin: 0;
+  }
+
+  .cafe__name {
+    font-family: var(--serif);
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--coffee);
+    margin: 0;
+  }
+
+  .cafe__url {
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+    margin: 0;
+    word-break: break-all;
+  }
+
+  .cafe__url a { color: var(--gold-deep); }
+
+  .cafe__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin-top: auto;
+    padding-top: 0.5rem;
+  }
+
+  .is-armed {
+    background: var(--bad) !important;
+    border-color: var(--bad) !important;
+    color: #fff !important;
+  }
+
+  /* ---- staff table ---- */
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--line); }
+  th { font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--caramel); }
+  td select { font-size: 0.85rem; padding: 0.3rem 0.4rem; }
+  .you { color: var(--ink-soft); font-size: 0.78rem; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top__inner">
+    <h1 class="top__brand">Selfie Wall <span class="top__where" id="shell-where"></span></h1>
+    <nav class="top__nav" id="shell-nav"></nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- Staff with no cafe yet land here; there is nothing for them to do but wait. -->
+  <div id="unassigned" class="hidden">
+    <h2>No cafe yet</h2>
+    <p class="notice notice--warn">
+      Your account isn't assigned to a cafe. Ask an owner to assign you one, then sign in again.
+    </p>
+  </div>
+
+  <div id="owner-view" class="hidden">
+    <h2>Cafes <span class="count" id="cafe-count"></span></h2>
+    <p class="hint">
+      Each cafe gets its own address. The screen at <code>/&lt;address&gt;</code> is public so a
+      kiosk browser can be pointed at it once and left alone — the admin pages behind it are not.
+    </p>
+
+    <div class="grid" id="cafe-grid"></div>
+
+    <h2>Add a cafe</h2>
+    <form class="card" id="new-cafe">
+      <p class="notice notice--bad hidden" id="cafe-error" role="alert"></p>
+      <div class="row2">
+        <div class="field">
+          <label for="cafe-name">Name</label>
+          <input id="cafe-name" type="text" placeholder="The Brew House" required>
+        </div>
+        <div class="field">
+          <label for="cafe-id">Address</label>
+          <input id="cafe-id" type="text" placeholder="brew-house" required
+                 pattern="[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?">
+        </div>
+      </div>
+      <p class="hint" style="margin:0.5rem 0 0" id="cafe-preview"></p>
+      <div class="actions-row" style="margin-top:0.9rem">
+        <button class="btn btn--primary" type="submit">Create cafe</button>
+      </div>
+    </form>
+
+    <h2 style="margin-top:var(--s6)">Staff</h2>
+    <p class="hint">
+      Staff moderate and edit one cafe. Owners can do that for every cafe, and can add
+      cafes and accounts.
+    </p>
+
+    <div class="card">
+      <table>
+        <thead><tr><th>Email</th><th>Role</th><th>Cafe</th><th></th></tr></thead>
+        <tbody id="user-rows"></tbody>
+      </table>
+      <p class="empty hidden" id="user-empty">No accounts yet.</p>
+    </div>
+
+    <h2>Add an account</h2>
+    <form class="card" id="new-user">
+      <p class="notice notice--bad hidden" id="user-error" role="alert"></p>
+      <div class="row2">
+        <div class="field">
+          <label for="u-email">Email</label>
+          <input id="u-email" type="email" required autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="u-password">Password</label>
+          <input id="u-password" type="password" required minlength="8" autocomplete="new-password">
+        </div>
+      </div>
+      <div class="row2" style="margin-top:0.9rem">
+        <div class="field">
+          <label for="u-role">Role</label>
+          <select id="u-role">
+            <option value="staff">Staff — one cafe</option>
+            <option value="owner">Owner — everything</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="u-cafe">Cafe</label>
+          <select id="u-cafe"></select>
+        </div>
+      </div>
+      <div class="actions-row" style="margin-top:0.9rem">
+        <button class="btn btn--primary" type="submit">Create account</button>
+      </div>
+    </form>
+  </div>
+</main>
+
+<script type="module">
+import { shell, api, boot, flash, arm } from '/admin-shell.js';
+
+const $ = (id) => document.getElementById(id);
+
+const profile = await boot({
+  where: 'Cafes',
+  nav: [{ href: '/admin/cafes', label: 'Cafes', ownerOnly: true }],
+});
+
+if (profile.role !== 'owner') {
+  // Only reachable by staff with no cafe assigned — anyone else was redirected
+  // to their own cafe by the server.
+  $('unassigned').classList.remove('hidden');
+} else {
+  $('owner-view').classList.remove('hidden');
+  await Promise.all([loadCafes(), loadUsers()]);
+}
+
+/* ---------------------------------------------------------------- cafes -- */
+
+let cafeList = [];
+
+async function loadCafes() {
+  cafeList = await api('/api/cafes');
+  $('cafe-count').textContent = cafeList.length;
+
+  const grid = $('cafe-grid');
+  if (!cafeList.length) {
+    grid.replaceChildren(Object.assign(document.createElement('p'), {
+      className: 'empty',
+      textContent: 'No cafes yet — add the first one below.',
+    }));
+    return;
+  }
+
+  grid.replaceChildren(...cafeList.map(renderCafe));
+  fillCafeSelect();
+}
+
+function renderCafe(cafe) {
+  const card = document.createElement('div');
+  card.className = 'card cafe';
+
+  const name = document.createElement('p');
+  name.className = 'cafe__name';
+  name.textContent = cafe.name;
+
+  const url = document.createElement('p');
+  url.className = 'cafe__url';
+  const a = document.createElement('a');
+  a.href = `/${cafe.id}`;
+  a.target = '_blank';
+  a.rel = 'noopener';
+  a.textContent = `${location.origin}/${cafe.id}`;
+  url.append(a);
+
+  const actions = document.createElement('div');
+  actions.className = 'cafe__actions';
+  actions.append(
+    link('Moderate', `/admin/${cafe.id}`),
+    link('Board', `/admin/${cafe.id}/board`),
+    button('Rename', 'btn--small', () => rename(cafe)),
+  );
+
+  const del = document.createElement('button');
+  del.className = 'btn btn--small btn--danger';
+  del.type = 'button';
+  del.textContent = 'Delete';
+  arm(del, {
+    idleLabel: 'Delete',
+    armedLabel: 'Delete everything?',
+    onConfirm: async () => {
+      try {
+        const { removedSubmissions } = await api(`/api/cafes/${cafe.id}`, { method: 'DELETE' });
+        flash(`Deleted ${cafe.name} and ${removedSubmissions} selfie(s).`);
+        await Promise.all([loadCafes(), loadUsers()]);
+      } catch (err) {
+        flash(err.message, 'bad');
+      }
+    },
+  });
+  actions.append(del);
+
+  card.append(name, url, actions);
+  return card;
+}
+
+function link(label, href) {
+  const a = document.createElement('a');
+  a.className = 'btn btn--small';
+  a.href = href;
+  a.textContent = label;
+  a.style.textDecoration = 'none';
+  return a;
+}
+
+function button(label, variant, onClick) {
+  const b = document.createElement('button');
+  b.className = `btn ${variant}`;
+  b.type = 'button';
+  b.textContent = label;
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+async function rename(cafe) {
+  const name = prompt(`New name for ${cafe.name}?`, cafe.name);
+  if (name === null || name.trim() === cafe.name) return;
+  try {
+    await api(`/api/cafes/${cafe.id}`, { method: 'PATCH', body: { name: name.trim() } });
+    flash('Renamed.');
+    await loadCafes();
+  } catch (err) {
+    flash(err.message, 'bad');
+  }
+}
+
+/* Suggest an address from the name so nobody has to invent a slug, but leave it
+   editable and stop suggesting the moment they type their own. */
+let addressTouched = false;
+$('cafe-id').addEventListener('input', () => { addressTouched = true; previewAddress(); });
+$('cafe-name').addEventListener('input', () => {
+  if (!addressTouched) {
+    $('cafe-id').value = $('cafe-name').value
+      .toLowerCase().trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40);
+  }
+  previewAddress();
+});
+
+function previewAddress() {
+  const id = $('cafe-id').value.trim();
+  $('cafe-preview').textContent = id
+    ? `Screen: ${location.origin}/${id} · Phone: ${location.origin}/${id}/upload`
+    : '';
+}
+
+$('new-cafe').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('cafe-error').classList.add('hidden');
+  try {
+    const cafe = await api('/api/cafes', {
+      method: 'POST',
+      body: { id: $('cafe-id').value.trim(), name: $('cafe-name').value.trim() },
+    });
+    $('new-cafe').reset();
+    addressTouched = false;
+    previewAddress();
+    flash(`${cafe.name} is live at /${cafe.id}.`);
+    await loadCafes();
+  } catch (err) {
+    $('cafe-error').textContent = err.message;
+    $('cafe-error').classList.remove('hidden');
+  }
+});
+
+/* ---------------------------------------------------------------- staff -- */
+
+async function loadUsers() {
+  const users = await api('/api/users');
+  const body = $('user-rows');
+  $('user-empty').classList.toggle('hidden', users.length > 0);
+  body.replaceChildren(...users.map(renderUser));
+}
+
+function renderUser(user) {
+  const tr = document.createElement('tr');
+  const isMe = user.id === profile.id;
+
+  const email = document.createElement('td');
+  email.textContent = user.email || '—';
+  if (isMe) {
+    const you = document.createElement('span');
+    you.className = 'you';
+    you.textContent = ' (you)';
+    email.append(you);
+  }
+
+  const role = document.createElement('td');
+  const roleSel = document.createElement('select');
+  for (const value of ['staff', 'owner']) {
+    roleSel.append(new Option(value === 'owner' ? 'Owner' : 'Staff', value, false, user.role === value));
+  }
+  // Nothing stops an owner locking themselves out except this.
+  roleSel.disabled = isMe;
+  roleSel.addEventListener('change', () => save(user.id, { role: roleSel.value, cafeId: cafeSel.value || null }));
+  role.append(roleSel);
+
+  const cafe = document.createElement('td');
+  const cafeSel = document.createElement('select');
+  cafeSel.append(new Option('—', '', false, !user.cafeId));
+  for (const c of cafeList) {
+    cafeSel.append(new Option(c.name, c.id, false, user.cafeId === c.id));
+  }
+  cafeSel.disabled = user.role === 'owner';
+  cafeSel.addEventListener('change', () => save(user.id, { role: roleSel.value, cafeId: cafeSel.value || null }));
+  cafe.append(cafeSel);
+
+  const actions = document.createElement('td');
+  if (!isMe) {
+    const del = document.createElement('button');
+    del.className = 'btn btn--small btn--danger';
+    del.type = 'button';
+    del.textContent = 'Remove';
+    arm(del, {
+      idleLabel: 'Remove',
+      armedLabel: 'Sure?',
+      onConfirm: async () => {
+        try {
+          await api(`/api/users/${user.id}`, { method: 'DELETE' });
+          flash('Account removed.');
+          await loadUsers();
+        } catch (err) {
+          flash(err.message, 'bad');
+        }
+      },
+    });
+    actions.append(del);
+  }
+
+  tr.append(email, role, cafe, actions);
+  return tr;
+}
+
+async function save(id, patch) {
+  try {
+    await api(`/api/users/${id}`, { method: 'PATCH', body: patch });
+    flash('Saved.');
+    await loadUsers();
+  } catch (err) {
+    flash(err.message, 'bad');
+    await loadUsers();
+  }
+}
+
+function fillCafeSelect() {
+  const sel = $('u-cafe');
+  sel.replaceChildren();
+  for (const c of cafeList) sel.append(new Option(c.name, c.id));
+}
+
+$('u-role').addEventListener('change', () => {
+  $('u-cafe').disabled = $('u-role').value === 'owner';
+});
+
+$('new-user').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('user-error').classList.add('hidden');
+  const role = $('u-role').value;
+  try {
+    await api('/api/users', {
+      method: 'POST',
+      body: {
+        email: $('u-email').value.trim(),
+        password: $('u-password').value,
+        role,
+        cafeId: role === 'owner' ? null : $('u-cafe').value,
+      },
+    });
+    $('new-user').reset();
+    $('u-cafe').disabled = false;
+    flash('Account created.');
+    await loadUsers();
+  } catch (err) {
+    $('user-error').textContent = err.message;
+    $('user-error').classList.remove('hidden');
+  }
+});
+</script>
+</body>
+</html>

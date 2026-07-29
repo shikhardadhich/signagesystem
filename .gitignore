@@ -11,3 +11,9 @@ firebase-debug.log
 .env
 .env.*
 !.env.example
+
+# Local cafe + board data written by the app (local driver only).
+data/
+
+# Board images uploaded through the admin, not part of the repo.
+public/assets/board/

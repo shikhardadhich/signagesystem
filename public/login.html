@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in — Selfie Wall</title>
+<base href="/">
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/admin.css">
+<style>
+  body {
+    display: grid;
+    place-items: center;
+    padding: var(--s5);
+    background:
+      radial-gradient(ellipse at 50% -20%, #543421 0%, transparent 60%),
+      linear-gradient(180deg, var(--coffee) 0%, var(--espresso) 100%);
+  }
+
+  .box {
+    width: min(380px, 100%);
+    text-align: center;
+  }
+
+  .crest {
+    width: 60px;
+    height: 60px;
+  }
+
+  .title {
+    font-family: var(--serif);
+    font-size: 1.55rem;
+    color: var(--cream);
+    margin: 0.5rem 0 0.2rem;
+  }
+
+  .sub {
+    font-size: 0.72rem;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin: 0 0 1.5rem;
+  }
+
+  .card {
+    text-align: left;
+    margin: 0;
+  }
+
+  .btn--primary { width: 100%; margin-top: 1.1rem; padding: 0.75rem; }
+
+  .foot {
+    color: rgba(247, 239, 225, 0.5);
+    font-size: 0.78rem;
+    line-height: 1.6;
+    margin: 1.2rem 0 0;
+  }
+
+  .foot a { color: var(--gold-light); }
+</style>
+</head>
+<body>
+
+<div class="box">
+  <img class="crest" src="/assets/emblem.png" alt="">
+  <h1 class="title">Selfie Wall</h1>
+  <p class="sub">Staff sign-in</p>
+
+  <form class="card" id="form" autocomplete="on">
+    <p class="notice notice--bad hidden" id="error" role="alert"></p>
+
+    <div class="field">
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" autocomplete="username" required>
+    </div>
+
+    <div class="field">
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+    </div>
+
+    <button class="btn btn--primary" type="submit" id="submit">Sign in</button>
+  </form>
+
+  <p class="foot" id="foot"></p>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+/* The display screens are public and unauthenticated on purpose, so anyone who
+   landed here looking for a menu board needs pointing at one. */
+fetch('/api/health')
+  .then((r) => r.json())
+  .then((h) => {
+    if (h.auth && h.auth.enabled === false) {
+      $('foot').innerHTML =
+        'Sign-in is switched off on this deployment, so anyone can reach the admin pages. ' +
+        '<a href="/admin">Open admin</a>';
+    }
+  })
+  .catch(() => {});
+
+$('form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('error').classList.add('hidden');
+  $('submit').disabled = true;
+  $('submit').textContent = 'Signing in…';
+
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: $('email').value, password: $('password').value }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Sign-in failed');
+
+    // Honour where they were headed before the redirect to sign in.
+    const wanted = new URLSearchParams(location.search).get('next');
+    location.href = wanted && wanted.startsWith('/') ? wanted : data.next || '/admin';
+  } catch (err) {
+    $('error').textContent = err.message;
+    $('error').classList.remove('hidden');
+    $('submit').disabled = false;
+    $('submit').textContent = 'Sign in';
+  }
+});
+</script>
+</body>
+</html>

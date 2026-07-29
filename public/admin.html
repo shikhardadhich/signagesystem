@@ -3,55 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Moderation — The Brew House Selfie Wall</title>
+<title>Moderation — Selfie Wall</title>
+<base href="/">
 <link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/admin.css">
 <style>
-  body {
-    background: linear-gradient(180deg, #fdf8ef 0%, var(--cream) 100%);
-    min-height: 100vh;
-    color: var(--ink);
-  }
-
-  header {
-    background: linear-gradient(180deg, var(--coffee) 0%, var(--espresso) 100%);
-    color: var(--cream);
-    padding: 1.4rem 1.5rem;
-    border-bottom: 3px solid var(--gold);
-  }
-
-  .header-inner {
-    max-width: 1100px;
-    margin: 0 auto;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
-    align-items: baseline;
-    justify-content: space-between;
-  }
-
-  .brand {
-    font-family: var(--serif);
-    font-size: 1.5rem;
-    margin: 0;
-  }
-
-  .brand em {
-    color: var(--gold-light);
-    font-style: normal;
-  }
-
-  .links a {
-    color: var(--gold-light);
-    font-size: 0.85rem;
-    text-decoration: none;
-    margin-left: 1.1rem;
-    border-bottom: 1px solid transparent;
-  }
-
-  .links a:hover {
-    border-bottom-color: var(--gold-light);
-  }
-
   main {
     max-width: 1100px;
     margin: 0 auto;
@@ -453,13 +409,10 @@
 </head>
 <body>
 
-<header>
-  <div class="header-inner">
-    <h1 class="brand">The Brew House <em>—</em> Moderation</h1>
-    <nav class="links">
-      <a href="/screen" target="_blank">Display screen ↗</a>
-      <a href="/upload" target="_blank">Upload page ↗</a>
-    </nav>
+<header class="top">
+  <div class="top__inner">
+    <h1 class="top__brand">Selfie Wall <span class="top__where" id="shell-where"></span></h1>
+    <nav class="top__nav" id="shell-nav"></nav>
   </div>
 </header>
 
@@ -491,9 +444,29 @@
   </aside>
 </main>
 
-<script>
+<script type="module">
+import { shell, api, boot, flash } from '/admin-shell.js';
+
 const POLL_MS = 6000;
 const $ = (id) => document.getElementById(id);
+
+const cafeId = location.pathname.split('/')[2];
+/** Every call on this page is scoped to one cafe. */
+const at = (suffix) => `/api/cafes/${cafeId}${suffix}`;
+
+await boot({
+  where: 'Moderation',
+  nav: [
+    { href: '/admin/cafes', label: 'Cafes', ownerOnly: true },
+    { href: `/admin/${cafeId}`, label: 'Moderation' },
+    { href: `/admin/${cafeId}/board`, label: 'Board' },
+    { href: `/${cafeId}`, label: 'Screen ↗', blank: true },
+    { href: `/${cafeId}/upload`, label: 'Upload ↗', blank: true },
+  ],
+});
+
+const cafe = shell.cafes.find((c) => c.id === cafeId);
+if (cafe) $('shell-where').textContent = `${cafe.name} · Moderation`;
 
 const FILTERS = [
   { key: 'pending', label: 'Needs review' },
@@ -515,9 +488,9 @@ const pendingDecisions = new Map();
 async function refresh() {
   try {
     const [subs, queue, wallState] = await Promise.all([
-      fetch('/api/submissions').then((r) => r.json()),
-      fetch('/api/queue').then((r) => r.json()),
-      fetch('/api/wall').then((r) => r.json()),
+      api(at('/submissions')),
+      api(at('/queue')),
+      api(at('/wall')),
     ]);
     wall = wallState;
     // Drop optimistic entries the server has now confirmed.
@@ -553,7 +526,7 @@ function render() {
  */
 async function loadFilterState() {
   try {
-    const health = await fetch('/api/health').then((r) => r.json());
+    const health = await api('/api/health');
     autoFilter = health.moderation || { enabled: false };
   } catch (err) {
     return;
@@ -737,11 +710,7 @@ async function setWallMode(mode) {
   wall = { mode, liveSince: mode === 'live' ? Date.now() : null };
   renderWall();
   try {
-    wall = await fetch('/api/wall', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode }),
-    }).then((r) => r.json());
+    wall = await api(at('/wall'), { method: 'POST', body: { mode } });
   } catch (err) {
     /* The next poll reconciles. */
   }
@@ -757,7 +726,7 @@ async function decide(id, action) {
   render();
 
   try {
-    await fetch(`/api/submissions/${id}/${action}`, { method: 'POST' });
+    await api(at(`/submissions/${id}/${action}`), { method: 'POST' });
   } catch (err) {
     pendingDecisions.delete(id);
   }
@@ -802,7 +771,7 @@ clearBtn.addEventListener('click', async () => {
   clearBtn.disabled = true;
   clearBtn.textContent = 'Clearing…';
   try {
-    const { removed } = await fetch('/api/submissions', { method: 'DELETE' }).then((r) => r.json());
+    const { removed } = await api(at('/submissions'), { method: 'DELETE' });
     submissions = [];
     pendingDecisions.clear();
     render();

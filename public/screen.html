@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>The Brew House — Selfie Wall</title>
+<title>Selfie Wall</title>
+<base href="/">
 <link rel="stylesheet" href="/theme.css">
 <style>
   /* Two full-screen states share the panel:
@@ -147,9 +148,54 @@
     flex: 1;
     align-content: center;
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(var(--per-page, 4), 1fr);
     gap: 2.4vh;
     min-height: 0;
+    /* The page swap animates this whole grid rather than each item, so four
+       photos move as one board instead of four things arriving separately. */
+    transition: opacity var(--page-fade, 420ms) var(--ease),
+      transform var(--page-fade, 420ms) var(--ease);
+  }
+
+  /* Outgoing page: lift and fade. The incoming page starts low and rises,
+     which reads as the next set arriving rather than the old one leaving. */
+  .items.is-leaving {
+    opacity: 0;
+    transform: translateY(-2.2vh);
+  }
+
+  .items.is-entering {
+    opacity: 0;
+    transform: translateY(2.2vh);
+  }
+
+  /* Which page of the menu is showing, for anyone glancing up mid-cycle. */
+  .pager {
+    display: flex;
+    justify-content: center;
+    gap: 0.9vh;
+    margin-top: 1.4vh;
+    min-height: 1vh;
+  }
+
+  .pager__dot {
+    width: 0.85vh;
+    height: 0.85vh;
+    border-radius: 50%;
+    background: rgba(201, 151, 63, 0.3);
+    transition: background var(--slow) var(--ease), transform var(--slow) var(--ease);
+  }
+
+  .pager__dot[data-on="1"] {
+    background: var(--gold);
+    transform: scale(1.35);
+  }
+
+  /* A menu that slides every few seconds is exactly what this setting is for. */
+  @media (prefers-reduced-motion: reduce) {
+    .items { transition: opacity 120ms linear; }
+    .items.is-leaving,
+    .items.is-entering { transform: none; }
   }
 
   .item {
@@ -633,7 +679,7 @@
       <header class="brand">
         <div class="brand__est">
           <span id="est-left">ESTD.</span>
-          <img class="brand__mark" src="assets/emblem.png" alt="">
+          <img class="brand__mark" id="brand-logo" src="/assets/emblem.png" alt="">
           <span id="est-right">2018</span>
         </div>
         <h1 class="brand__name" id="cafe-name">The Brew House</h1>
@@ -642,6 +688,7 @@
 
       <div class="rule" id="section-title">Our Signatures</div>
       <div class="items" id="items"></div>
+      <div class="pager" id="pager" aria-hidden="true"></div>
 
       <div class="banner">
         <h3 id="banner-title">Good coffee. Good vibes.</h3>
@@ -669,7 +716,7 @@
     <svg class="takeover__leaf takeover__leaf--tr" viewBox="0 0 120 120" aria-hidden="true"><use href="#leaves"></use></svg>
 
     <div class="takeover__brand">
-      <img class="takeover__mark" src="assets/emblem.png" alt="">
+      <img class="takeover__mark" id="takeover-logo" src="/assets/emblem.png" alt="">
       <h2 class="takeover__name" id="t-name">The Brew House</h2>
       <p class="takeover__tagline" id="t-tagline">Fresh coffee. Real moments.</p>
       <svg class="takeover__orn" viewBox="0 0 140 12" aria-hidden="true">
@@ -750,12 +797,35 @@ let showToken = 0;
 
 /* ---- menu board content ---- */
 
-fetch('menu.json')
-  .then((r) => r.json())
-  .then(renderMenu)
-  .catch(() => {});
+/* Which cafe this screen belongs to is the first path segment: one deployment
+   serves every site, and a kiosk browser is pointed at /<cafe> once and left. */
+const CAFE_ID = location.pathname.split('/').filter(Boolean)[0];
+const at = (suffix) => `/api/cafes/${CAFE_ID}${suffix}`;
+
+/* Re-read the board periodically so an edit in the admin reaches the TV on its
+   own. Nobody is going to walk over and refresh a screen bolted to a wall. */
+const BOARD_POLL_MS = 60000;
+
+let board = {};
+
+const loadBoard = () =>
+  fetch(at('/board'))
+    .then((r) => r.json())
+    .then(renderMenu)
+    .catch(() => {});
+
+loadBoard();
+setInterval(loadBoard, BOARD_POLL_MS);
+
+/** The cafe's logo, or the shipped crest when none has been uploaded. */
+function logoUrl() {
+  return board.logo || '/assets/emblem.png';
+}
 
 function renderMenu(m) {
+  board = m || {};
+  $('brand-logo').src = logoUrl();
+  $('takeover-logo').src = logoUrl();
   $('cafe-name').textContent = m.name;
   $('t-name').textContent = m.name;
   $('cafe-tagline').textContent = m.tagline;
@@ -769,31 +839,7 @@ function renderMenu(m) {
   $('wall-sub').textContent = m.wall?.subtitle || '';
   document.title = `${m.name} — Selfie Wall`;
 
-  const items = $('items');
-  items.replaceChildren(...(m.items || []).map((it) => {
-    const box = document.createElement('div');
-    box.className = 'item';
-
-    const shot = document.createElement('div');
-    shot.className = 'item__shot';
-    // Try the photograph first, then the line-art stand-in, then the crest.
-    // Dropping a real photo into assets/menu/ therefore needs no config change,
-    // and a missing file can never leave a blank slot on the wall.
-    shot.append(imageChain([it.image, it.fallback], it.name));
-
-    const name = document.createElement('p');
-    name.className = 'item__name';
-    name.textContent = it.name;
-    const desc = document.createElement('p');
-    desc.className = 'item__desc';
-    desc.textContent = it.description || '';
-    const price = document.createElement('p');
-    price.className = 'item__price';
-    price.textContent = it.price || '';
-
-    box.append(shot, name, desc, price);
-    return box;
-  }));
+  startMenuRotation(m);
 
   $('steps').replaceChildren(...(m.wall?.steps || []).map((s, i) => {
     const li = document.createElement('li');
@@ -809,6 +855,128 @@ function renderMenu(m) {
     li.append(n, t, d);
     return li;
   }));
+}
+
+/* ---- rotating menu ----
+
+   A cafe has more on its menu than fits on a board drawn for four items, so the
+   items are dealt out a page at a time and the page changes on a timer — the
+   same trick the boards in a coffee shop chain use.
+
+   Two things this has to get right. Pages are rebuilt from the board data on
+   every save, so an edit changes what is cycling without waiting for a
+   reload. And the timer stops while a selfie is taking over the screen: a page
+   that turned behind the takeover would be gone before anyone saw it. */
+
+const PAGE_FADE_MS = 420;
+
+let menuPages = [];
+let menuPage = 0;
+let menuTimer = null;
+let menuDwellMs = 8000;
+
+function startMenuRotation(board) {
+  const items = board.items || [];
+  const perPage = Math.max(1, board.rotation?.perPage || 4);
+  menuDwellMs = Math.max(3, board.rotation?.seconds || 8) * 1000;
+
+  menuPages = [];
+  for (let i = 0; i < items.length; i += perPage) menuPages.push(items.slice(i, i + perPage));
+  if (!menuPages.length) menuPages = [[]];
+
+  // The grid is drawn for however many fit on a page, so a board showing two
+  // items doesn't leave two empty columns.
+  $('items').style.setProperty('--per-page', perPage);
+  $('items').style.setProperty('--page-fade', `${PAGE_FADE_MS}ms`);
+
+  // Keep our place across a board edit where possible: re-reading the menu
+  // every minute must not keep snapping the display back to the first page.
+  menuPage = Math.min(menuPage, menuPages.length - 1);
+
+  paintMenuPage();
+  renderPager();
+  scheduleMenuTurn();
+}
+
+function paintMenuPage() {
+  const host = $('items');
+  host.replaceChildren(...(menuPages[menuPage] || []).map(itemNode));
+  renderPager();
+}
+
+function itemNode(it) {
+  const box = document.createElement('div');
+  box.className = 'item';
+
+  const shot = document.createElement('div');
+  shot.className = 'item__shot';
+  // Try the photograph first, then the line-art stand-in, then the crest.
+  // Dropping a real photo into assets/menu/ therefore needs no config change,
+  // and a missing file can never leave a blank slot on the wall.
+  shot.append(imageChain([it.image, it.fallback], it.name));
+
+  const name = document.createElement('p');
+  name.className = 'item__name';
+  name.textContent = it.name;
+  const desc = document.createElement('p');
+  desc.className = 'item__desc';
+  desc.textContent = it.description || '';
+  const price = document.createElement('p');
+  price.className = 'item__price';
+  price.textContent = it.price || '';
+
+  box.append(shot, name, desc, price);
+  return box;
+}
+
+function renderPager() {
+  const pager = $('pager');
+  if (!pager) return;
+  // One page is not a sequence; dots would just be a decoration that never moves.
+  if (menuPages.length < 2) return pager.replaceChildren();
+  pager.replaceChildren(...menuPages.map((_, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'pager__dot';
+    dot.dataset.on = i === menuPage ? '1' : '0';
+    return dot;
+  }));
+}
+
+function scheduleMenuTurn() {
+  clearTimeout(menuTimer);
+  if (menuPages.length < 2) return;
+  menuTimer = setTimeout(turnMenuPage, menuDwellMs);
+}
+
+function turnMenuPage() {
+  const host = $('items');
+  host.classList.add('is-leaving');
+
+  setTimeout(() => {
+    menuPage = (menuPage + 1) % menuPages.length;
+    paintMenuPage();
+
+    // Jump to the entering position with transitions off, then release: doing
+    // it in one frame would animate the jump itself and the page would appear
+    // to slide the wrong way first.
+    host.classList.remove('is-leaving');
+    host.classList.add('is-entering');
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      host.classList.remove('is-entering');
+    }));
+
+    scheduleMenuTurn();
+  }, PAGE_FADE_MS);
+}
+
+/** Held while a selfie owns the screen, so no page turns unseen behind it. */
+function pauseMenuRotation() {
+  clearTimeout(menuTimer);
+  menuTimer = null;
+}
+
+function resumeMenuRotation() {
+  if (!menuTimer) scheduleMenuTurn();
 }
 
 /** An <img> that walks a list of sources, falling back to the crest. */
@@ -835,7 +1003,7 @@ function placeholder() {
   const box = document.createElement('div');
   box.className = 'item__placeholder';
   const img = document.createElement('img');
-  img.src = 'assets/emblem.png';
+  img.src = logoUrl();
   img.alt = '';
   box.append(img);
   return box;
@@ -843,7 +1011,7 @@ function placeholder() {
 
 /* ---- QR ---- */
 
-fetch('/api/qr')
+fetch(at('/qr'))
   .then((r) => r.json())
   .then(({ dataUrl }) => { $('qr-img').src = dataUrl; })
   .catch(() => {});
@@ -856,7 +1024,7 @@ const signature = (list) => list.map((s) => `${s.id}:${s.decidedAt}`).join(',');
 
 async function poll() {
   try {
-    const [qRes, wRes] = await Promise.all([fetch('/api/queue'), fetch('/api/wall')]);
+    const [qRes, wRes] = await Promise.all([fetch(at('/queue')), fetch(at('/wall'))]);
     if (!qRes.ok || !wRes.ok) throw new Error('poll failed');
     const next = await qRes.json();
     wall = await wRes.json();
@@ -940,10 +1108,14 @@ async function takeover(item) {
   const h = el.shotImg.naturalHeight || 3;
   el.shotFrame.style.aspectRatio = `${w} / ${h}`;
 
+  // The board is hidden for the next 15s; a menu page turning behind it would
+  // be spent on nobody.
+  pauseMenuRotation();
   document.body.classList.add('is-takeover');
   await wait(TAKEOVER_MS);
   if (token !== showToken) return;
   document.body.classList.remove('is-takeover');
+  resumeMenuRotation();
 }
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -976,10 +1148,25 @@ async function cycle() {
   cycleTimer = setTimeout(cycle, BOARD_REST_MS);
 }
 
-/* ---- kiosk controls ---- */
+/* ---- kiosk controls ----
+   The screen itself is public, but switching the wall between looping and live
+   is a staff action. The control is hidden unless this browser carries a
+   session that may edit this cafe — a visible button that always failed would
+   be worse than no button. Sign in once on the TV to get it back. */
 
 const IDLE_MS = 4000;
 let idleTimer = null;
+let mayControl = false;
+
+fetch('/api/auth/me')
+  .then((r) => (r.ok ? r.json() : null))
+  .then((me) => {
+    mayControl = Boolean(
+      me && (me.profile.role === 'owner' || me.profile.cafeId === CAFE_ID)
+    );
+    if (!mayControl) el.control.remove();
+  })
+  .catch(() => el.control.remove());
 
 function renderControl() {
   for (const btn of el.control.querySelectorAll('.control__btn')) {
@@ -988,6 +1175,7 @@ function renderControl() {
 }
 
 function wake() {
+  if (!mayControl) return;
   el.control.classList.add('is-visible');
   document.body.classList.remove('is-idle');
   clearTimeout(idleTimer);
@@ -1002,7 +1190,7 @@ async function setMode(mode) {
   wall = { ...wall, mode };
   renderControl();
   try {
-    await fetch('/api/wall', {
+    await fetch(at('/wall'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mode }),

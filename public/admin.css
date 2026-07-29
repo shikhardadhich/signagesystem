@@ -1,0 +1,293 @@
+/**
+ * Shared chrome for the signed-in pages: sign-in, the cafe picker, moderation
+ * and the board editor.
+ *
+ * These four pages are one tool, so the header, cards, forms and buttons live
+ * here rather than being pasted into each file — a change to a button is one
+ * edit, and the pages cannot drift apart visually.
+ *
+ * theme.css owns the palette; this file only arranges it.
+ */
+
+body {
+  background: linear-gradient(180deg, #fdf8ef 0%, var(--cream) 100%);
+  min-height: 100vh;
+  color: var(--ink);
+}
+
+/* ------------------------------------------------------------- header -- */
+
+.top {
+  background: linear-gradient(180deg, var(--coffee) 0%, var(--espresso) 100%);
+  color: var(--cream);
+  border-bottom: 3px solid var(--gold);
+}
+
+.top__inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1rem 1.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s4);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.top__brand {
+  font-family: var(--serif);
+  font-size: 1.35rem;
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.top__brand em {
+  color: var(--gold-light);
+  font-style: normal;
+}
+
+.top__where {
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.top__nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.1rem;
+  font-size: 0.85rem;
+}
+
+.top__nav a {
+  color: var(--gold-light);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  padding-bottom: 1px;
+}
+
+.top__nav a:hover,
+.top__nav a[aria-current="page"] {
+  border-bottom-color: var(--gold-light);
+}
+
+.top__who {
+  color: rgba(247, 239, 225, 0.6);
+  font-size: 0.78rem;
+}
+
+.top__out {
+  font: inherit;
+  font-size: 0.85rem;
+  background: none;
+  border: 1px solid rgba(230, 193, 121, 0.5);
+  color: var(--gold-light);
+  border-radius: var(--r-pill);
+  padding: 0.25rem 0.8rem;
+  cursor: pointer;
+}
+
+.top__out:hover {
+  background: rgba(230, 193, 121, 0.14);
+}
+
+/* --------------------------------------------------------------- shell -- */
+
+.wrap {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.75rem 1.5rem 4rem;
+}
+
+h2 {
+  font-family: var(--serif);
+  font-size: 1.15rem;
+  margin: 0 0 0.9rem;
+  color: var(--coffee);
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.hint {
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin: 0 0 var(--s5);
+  max-width: 62ch;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 1.15rem;
+  box-shadow: var(--shadow-card);
+  margin-bottom: 1rem;
+}
+
+.empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-style: italic;
+  margin: 0;
+}
+
+.hidden { display: none !important; }
+
+/* --------------------------------------------------------------- forms -- */
+
+label,
+.label {
+  display: block;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--caramel);
+  margin: 0 0 0.35rem;
+  font-weight: 700;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+textarea,
+select {
+  width: 100%;
+  font: inherit;
+  font-size: 0.95rem;
+  padding: 0.6rem 0.7rem;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+  border-color: var(--gold);
+}
+
+.field + .field { margin-top: 0.9rem; }
+
+.row2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.9rem;
+}
+
+@media (max-width: 620px) {
+  .row2 { grid-template-columns: 1fr; }
+}
+
+/* -------------------------------------------------------------- buttons -- */
+
+.btn {
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  padding: 0.55rem 1.1rem;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--mocha);
+  cursor: pointer;
+  transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+
+.btn:hover:not(:disabled) { border-color: var(--gold); }
+.btn:disabled { opacity: 0.55; cursor: default; }
+
+.btn--primary {
+  background: var(--coffee);
+  border-color: var(--coffee);
+  color: var(--cream);
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: var(--espresso);
+  border-color: var(--espresso);
+}
+
+.btn--danger {
+  background: #fff;
+  border-color: rgba(162, 69, 47, 0.5);
+  color: var(--bad);
+}
+
+.btn--danger:hover:not(:disabled) {
+  background: var(--bad);
+  border-color: var(--bad);
+  color: #fff;
+}
+
+.btn--small {
+  font-size: 0.78rem;
+  padding: 0.35rem 0.7rem;
+}
+
+.actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+/* -------------------------------------------------------------- notices -- */
+
+.notice {
+  border-radius: var(--r-sm);
+  padding: 0.65rem 0.85rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin: 0 0 var(--s4);
+  border: 1px solid;
+}
+
+.notice--warn {
+  background: rgba(201, 151, 63, 0.14);
+  border-color: rgba(201, 151, 63, 0.55);
+  color: #7a5320;
+}
+
+.notice--bad {
+  background: rgba(162, 69, 47, 0.12);
+  border-color: rgba(162, 69, 47, 0.5);
+  color: var(--bad);
+}
+
+.notice--ok {
+  background: rgba(78, 125, 63, 0.12);
+  border-color: rgba(78, 125, 63, 0.45);
+  color: #33562a;
+}
+
+/* A save confirmation that fades rather than sitting there being read twice. */
+.flash {
+  position: fixed;
+  left: 50%;
+  bottom: 1.5rem;
+  transform: translateX(-50%);
+  background: var(--espresso);
+  color: var(--cream);
+  padding: 0.6rem 1.2rem;
+  border-radius: var(--r-pill);
+  font-size: 0.88rem;
+  box-shadow: var(--shadow-lift);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--slow) var(--ease);
+  z-index: 40;
+}
+
+.flash.is-on { opacity: 1; }
+.flash[data-kind="bad"] { background: var(--bad); }

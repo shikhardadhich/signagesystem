@@ -54,9 +54,10 @@ function extensionFor(file) {
  * refuses those before calling add() — so this exists to tell a moderator
  * which photos arrived unverified and need a closer look.
  */
-function newSubmission(name, message, moderation) {
+function newSubmission(cafeId, name, message, moderation) {
   return {
     id: makeId(),
+    cafeId,
     name,
     message,
     url: null,
@@ -68,7 +69,8 @@ function newSubmission(name, message, moderation) {
 }
 
 /**
- * How the display screen behaves.
+ * How the display screen behaves. Per cafe: two sites run their own walls and
+ * one switching to live must not stop the other's rotation.
  *   loop — rotate through every approved photo (the default).
  *   live — stop rotating and show only photos approved after liveSince, so the
  *          wall stands by for new arrivals instead of replaying the backlog.
@@ -100,18 +102,20 @@ function localDriver() {
     writable = false;
   }
 
-  let wall = { ...DEFAULT_WALL };
+  /** cafeId -> wall state. */
+  const walls = new Map();
 
   return {
     name: 'local',
-    async getWall() {
+    async getWall(cafeId) {
+      return { ...(walls.get(cafeId) || DEFAULT_WALL) };
+    },
+    async setWall(cafeId, mode) {
+      const wall = nextWall(mode);
+      walls.set(cafeId, wall);
       return { ...wall };
     },
-    async setWall(mode) {
-      wall = nextWall(mode);
-      return { ...wall };
-    },
-    async add(name, message, file, moderation) {
+    async add(cafeId, name, message, file, moderation) {
       if (!writable) {
         const err = new Error(
           "This deployment has no photo storage, so uploads can't be saved. " +
@@ -120,36 +124,39 @@ function localDriver() {
         err.status = 503;
         throw err;
       }
-      const submission = newSubmission(name, message, moderation);
+      const submission = newSubmission(cafeId, name, message, moderation);
       const filename = `${submission.id}${extensionFor(file)}`;
       await fs.promises.writeFile(path.join(UPLOAD_DIR, filename), file.buffer);
       submission.url = `/uploads/${filename}`;
       submissions.push(submission);
       return submission;
     },
-    async list() {
-      return submissions.map((s) => ({ ...s }));
+    async list(cafeId) {
+      return submissions.filter((s) => s.cafeId === cafeId).map((s) => ({ ...s }));
     },
-    async get(id) {
-      const found = submissions.find((s) => s.id === id);
+    /* Every lookup is scoped by cafe, not just filtered after the fact: an id
+       guessed from another cafe must miss, or one site's staff can read
+       another's queue by walking ids. */
+    async get(cafeId, id) {
+      const found = submissions.find((s) => s.id === id && s.cafeId === cafeId);
       return found ? { ...found } : null;
     },
-    async setStatus(id, status) {
-      const found = submissions.find((s) => s.id === id);
+    async setStatus(cafeId, id, status) {
+      const found = submissions.find((s) => s.id === id && s.cafeId === cafeId);
       if (!found) return null;
       found.status = status;
       found.decidedAt = Date.now();
       return { ...found };
     },
-    async clear() {
-      const removed = submissions.length;
+    async clear(cafeId) {
+      const mine = submissions.filter((s) => s.cafeId === cafeId);
       await Promise.all(
-        submissions.map((s) =>
+        mine.map((s) =>
           fs.promises.unlink(path.join(UPLOAD_DIR, path.basename(s.url))).catch(() => {})
         )
       );
-      submissions.length = 0;
-      return { removed };
+      for (const s of mine) submissions.splice(submissions.indexOf(s), 1);
+      return { removed: mine.length };
     },
   };
 }
@@ -171,22 +178,22 @@ function firebaseDriver() {
   const bucket = admin.storage().bucket();
   const COLLECTION = 'submissions';
 
-  const wallRef = db.collection('settings').doc('wall');
+  const wallRef = (cafeId) => db.collection('settings').doc(`wall:${cafeId}`);
 
   return {
     name: 'firebase',
-    async getWall() {
-      const doc = await wallRef.get();
+    async getWall(cafeId) {
+      const doc = await wallRef(cafeId).get();
       return doc.exists ? { ...DEFAULT_WALL, ...doc.data() } : { ...DEFAULT_WALL };
     },
-    async setWall(mode) {
+    async setWall(cafeId, mode) {
       const wall = nextWall(mode);
-      await wallRef.set(wall);
+      await wallRef(cafeId).set(wall);
       return wall;
     },
-    async add(name, message, file, moderation) {
-      const submission = newSubmission(name, message, moderation);
-      const objectPath = `selfies/${submission.id}${extensionFor(file)}`;
+    async add(cafeId, name, message, file, moderation) {
+      const submission = newSubmission(cafeId, name, message, moderation);
+      const objectPath = `selfies/${cafeId}/${submission.id}${extensionFor(file)}`;
 
       // A download token gives a stable public URL without needing object ACLs,
       // which uniform bucket-level access blocks outright.
@@ -203,30 +210,33 @@ function firebaseDriver() {
       await db.collection(COLLECTION).doc(submission.id).set(submission);
       return submission;
     },
-    async list() {
-      const snap = await db.collection(COLLECTION).get();
+    async list(cafeId) {
+      const snap = await db.collection(COLLECTION).where('cafeId', '==', cafeId).get();
       return snap.docs.map((d) => d.data());
     },
-    async get(id) {
+    async get(cafeId, id) {
       const doc = await db.collection(COLLECTION).doc(id).get();
-      return doc.exists ? doc.data() : null;
+      if (!doc.exists) return null;
+      // Scoped, not merely filtered: an id from another cafe must miss.
+      const data = doc.data();
+      return data.cafeId === cafeId ? data : null;
     },
-    async setStatus(id, status) {
+    async setStatus(cafeId, id, status) {
       const ref = db.collection(COLLECTION).doc(id);
       const doc = await ref.get();
-      if (!doc.exists) return null;
+      if (!doc.exists || doc.data().cafeId !== cafeId) return null;
       const updated = { ...doc.data(), status, decidedAt: Date.now() };
       await ref.set(updated);
       return updated;
     },
-    async clear() {
-      const snap = await db.collection(COLLECTION).get();
+    async clear(cafeId) {
+      const snap = await db.collection(COLLECTION).where('cafeId', '==', cafeId).get();
       // Records go first: an orphaned image is invisible, an orphaned record
       // renders as a broken photo on the wall.
       const batch = db.batch();
       snap.docs.forEach((d) => batch.delete(d.ref));
       await batch.commit();
-      await bucket.deleteFiles({ prefix: 'selfies/' });
+      await bucket.deleteFiles({ prefix: `selfies/${cafeId}/` });
       return { removed: snap.size };
     },
   };
@@ -252,7 +262,9 @@ function supabaseDriver() {
 
   const TABLE = process.env.SUPABASE_TABLE || 'submissions';
   const BUCKET = process.env.SUPABASE_BUCKET || 'selfies';
-  const WALL_ID = 'wall';
+  // One settings row per cafe, so switching one wall to live leaves every other
+  // site's rotation alone.
+  const wallId = (cafeId) => `wall:${cafeId}`;
 
   const check = ({ data, error }) => {
     if (error) throw new Error(`Supabase: ${error.message}`);
@@ -262,6 +274,7 @@ function supabaseDriver() {
   // Postgres columns are snake_case; the rest of the app speaks camelCase.
   const toRow = (s) => ({
     id: s.id,
+    cafe_id: s.cafeId,
     name: s.name,
     message: s.message,
     url: s.url,
@@ -274,6 +287,7 @@ function supabaseDriver() {
   const fromRow = (r) =>
     r && {
       id: r.id,
+      cafeId: r.cafe_id,
       name: r.name,
       message: r.message || '',
       url: r.url,
@@ -309,19 +323,19 @@ function supabaseDriver() {
 
   return {
     name: 'supabase',
-    async getWall() {
-      const { data, error } = await db.from('settings').select('value').eq('id', WALL_ID).maybeSingle();
+    async getWall(cafeId) {
+      const { data, error } = await db.from('settings').select('value').eq('id', wallId(cafeId)).maybeSingle();
       if (error) throw new Error(`Supabase: ${error.message}`);
       return data ? { ...DEFAULT_WALL, ...data.value } : { ...DEFAULT_WALL };
     },
-    async setWall(mode) {
+    async setWall(cafeId, mode) {
       const wall = nextWall(mode);
-      check(await db.from('settings').upsert({ id: WALL_ID, value: wall }));
+      check(await db.from('settings').upsert({ id: wallId(cafeId), value: wall }));
       return wall;
     },
-    async add(name, message, file, moderation) {
-      const submission = newSubmission(name, message, moderation);
-      submission.path = `${submission.id}${extensionFor(file)}`;
+    async add(cafeId, name, message, file, moderation) {
+      const submission = newSubmission(cafeId, name, message, moderation);
+      submission.path = `${cafeId}/${submission.id}${extensionFor(file)}`;
 
       check(
         await db.storage.from(BUCKET).upload(submission.path, file.buffer, {
@@ -334,26 +348,33 @@ function supabaseDriver() {
       await insertRow(toRow(submission));
       return submission;
     },
-    async list() {
-      const rows = check(await db.from(TABLE).select('*').order('submitted_at', { ascending: true }));
+    async list(cafeId) {
+      const rows = check(
+        await db.from(TABLE).select('*').eq('cafe_id', cafeId)
+          .order('submitted_at', { ascending: true })
+      );
       return rows.map(fromRow);
     },
-    async get(id) {
-      const { data, error } = await db.from(TABLE).select('*').eq('id', id).maybeSingle();
+    /* cafe_id is part of every lookup rather than a filter applied afterwards,
+       so an id belonging to another cafe simply misses. */
+    async get(cafeId, id) {
+      const { data, error } = await db.from(TABLE).select('*')
+        .eq('id', id).eq('cafe_id', cafeId).maybeSingle();
       if (error) throw new Error(`Supabase: ${error.message}`);
       return fromRow(data) || null;
     },
-    async setStatus(id, status) {
+    async setStatus(cafeId, id, status) {
       const rows = check(
-        await db.from(TABLE).update({ status, decided_at: Date.now() }).eq('id', id).select()
+        await db.from(TABLE).update({ status, decided_at: Date.now() })
+          .eq('id', id).eq('cafe_id', cafeId).select()
       );
       return rows.length ? fromRow(rows[0]) : null;
     },
-    async clear() {
-      const rows = check(await db.from(TABLE).select('path'));
+    async clear(cafeId) {
+      const rows = check(await db.from(TABLE).select('path').eq('cafe_id', cafeId));
       // Rows first: an orphaned image is invisible, an orphaned row renders as
       // a broken photo on the wall.
-      check(await db.from(TABLE).delete().neq('id', ''));
+      check(await db.from(TABLE).delete().eq('cafe_id', cafeId));
       const paths = rows.map((r) => r.path).filter(Boolean);
       if (paths.length) check(await db.storage.from(BUCKET).remove(paths));
       return { removed: rows.length };
@@ -366,9 +387,11 @@ function supabaseDriver() {
 function vercelDriver() {
   const { put, list, get, del } = require('@vercel/blob');
 
-  const IDS = 'selfiewall:ids';
-  const key = (id) => `selfiewall:sub:${id}`;
-  const META = 'meta/';
+  // Keys and blob prefixes are namespaced by cafe, so listing one site's queue
+  // never walks another's records.
+  const IDS = (cafeId) => `selfiewall:${cafeId}:ids`;
+  const key = (cafeId, id) => `selfiewall:${cafeId}:sub:${id}`;
+  const META = (cafeId) => `meta/${cafeId}/`;
 
   // Redis is optional. With it, the queue is one round trip. Without it, each
   // submission's record is its own small JSON blob — so a Blob store alone is
@@ -402,7 +425,7 @@ function vercelDriver() {
   }
 
   const writeMeta = (submission) =>
-    putBlob(`${META}${submission.id}.json`, JSON.stringify(submission), {
+    putBlob(`${META(submission.cafeId)}${submission.id}.json`, JSON.stringify(submission), {
       contentType: 'application/json',
       addRandomSuffix: false,
       allowOverwrite: true,
@@ -430,13 +453,14 @@ function vercelDriver() {
      store suspended. list() already reports uploadedAt and size, so a record is
      only re-read when it has actually changed. Steady state is one list call. */
   const recordCache = new Map();
-  let listCache = { at: 0, value: null };
+  /** cafeId -> { at, value }. Cached per cafe: two sites poll independently. */
+  const listCache = new Map();
   // Just under the client poll interval, so two clients polling out of phase
   // cost one list between them rather than two.
   const LIST_TTL = 5000;
 
-  function invalidate() {
-    listCache = { at: 0, value: null };
+  function invalidate(cafeId) {
+    listCache.delete(cafeId);
   }
 
   async function readMeta(prefix) {
@@ -457,23 +481,25 @@ function vercelDriver() {
     return records.filter(Boolean);
   }
 
-  const WALL_KEY = 'selfiewall:wall';
-  const WALL_BLOB = 'wall.json';
+  const WALL_KEY = (cafeId) => `selfiewall:${cafeId}:wall`;
+  const WALL_BLOB = (cafeId) => `wall/${cafeId}.json`;
 
   return {
     name: 'vercel',
     get access() {
       return access;
     },
-    async getWall() {
-      const stored = redis ? await redis.get(WALL_KEY) : await readBlobJson(WALL_BLOB);
+    async getWall(cafeId) {
+      const stored = redis
+        ? await redis.get(WALL_KEY(cafeId))
+        : await readBlobJson(WALL_BLOB(cafeId));
       return stored ? { ...DEFAULT_WALL, ...stored } : { ...DEFAULT_WALL };
     },
-    async setWall(mode) {
+    async setWall(cafeId, mode) {
       const wall = nextWall(mode);
-      if (redis) await redis.set(WALL_KEY, wall);
+      if (redis) await redis.set(WALL_KEY(cafeId), wall);
       else {
-        await putBlob(WALL_BLOB, JSON.stringify(wall), {
+        await putBlob(WALL_BLOB(cafeId), JSON.stringify(wall), {
           contentType: 'application/json',
           addRandomSuffix: false,
           allowOverwrite: true,
@@ -482,9 +508,9 @@ function vercelDriver() {
       }
       return wall;
     },
-    async add(name, message, file, moderation) {
-      const submission = newSubmission(name, message, moderation);
-      submission.path = `selfies/${submission.id}${extensionFor(file)}`;
+    async add(cafeId, name, message, file, moderation) {
+      const submission = newSubmission(cafeId, name, message, moderation);
+      submission.path = `selfies/${cafeId}/${submission.id}${extensionFor(file)}`;
       const blob = await putBlob(submission.path, file.buffer, {
         contentType: file.mimetype,
         addRandomSuffix: false,
@@ -492,70 +518,73 @@ function vercelDriver() {
       // A private blob's own URL needs credentials a browser doesn't have, so
       // point at our proxy route instead; public blobs are served straight
       // from the CDN.
-      submission.url = access === 'private' ? `/api/photo/${submission.id}` : blob.url;
+      submission.url = access === 'private'
+        ? `/api/cafes/${cafeId}/photo/${submission.id}`
+        : blob.url;
 
       if (redis) {
         // Record first, then index — a crash between the two leaves an orphan
         // record rather than an id pointing at nothing.
-        await redis.set(key(submission.id), submission);
-        await redis.rpush(IDS, submission.id);
+        await redis.set(key(cafeId, submission.id), submission);
+        await redis.rpush(IDS(cafeId), submission.id);
       } else {
         await writeMeta(submission);
-        invalidate();
+        invalidate(cafeId);
       }
       return submission;
     },
-    async list() {
+    async list(cafeId) {
       if (!redis) {
         // Collapses the screen's and the admin page's polls when they land
         // together, without letting a moderation decision go stale.
-        if (listCache.value && Date.now() - listCache.at < LIST_TTL) return listCache.value;
-        const value = await readMeta(META);
-        listCache = { at: Date.now(), value };
+        const hit = listCache.get(cafeId);
+        if (hit && Date.now() - hit.at < LIST_TTL) return hit.value;
+        const value = await readMeta(META(cafeId));
+        listCache.set(cafeId, { at: Date.now(), value });
         return value;
       }
-      const ids = await redis.lrange(IDS, 0, -1);
+      const ids = await redis.lrange(IDS(cafeId), 0, -1);
       if (!ids.length) return [];
-      const records = await redis.mget(...ids.map(key));
+      const records = await redis.mget(...ids.map((id) => key(cafeId, id)));
       return records.filter(Boolean);
     },
-    async get(id) {
-      if (!redis) return (await readBlobJson(`${META}${id}.json`)) || null;
-      return (await redis.get(key(id))) || null;
+    async get(cafeId, id) {
+      if (!redis) return (await readBlobJson(`${META(cafeId)}${id}.json`)) || null;
+      return (await redis.get(key(cafeId, id))) || null;
     },
-    async setStatus(id, status) {
-      const submission = await this.get(id);
+    async setStatus(cafeId, id, status) {
+      const submission = await this.get(cafeId, id);
       if (!submission) return null;
       submission.status = status;
       submission.decidedAt = Date.now();
       // Each record owns its own key/blob, so a decision never rewrites a
       // shared index and cannot clobber a concurrent upload.
-      if (redis) await redis.set(key(id), submission);
+      if (redis) await redis.set(key(cafeId, id), submission);
       else {
         await writeMeta(submission);
-        invalidate();
+        invalidate(cafeId);
       }
       return submission;
     },
-    async clear() {
-      const records = await this.list();
+    async clear(cafeId) {
+      const records = await this.list(cafeId);
 
       if (redis) {
-        const ids = await redis.lrange(IDS, 0, -1);
-        if (ids.length) await redis.del(...ids.map(key));
-        await redis.del(IDS);
+        const ids = await redis.lrange(IDS(cafeId), 0, -1);
+        if (ids.length) await redis.del(...ids.map((id) => key(cafeId, id)));
+        await redis.del(IDS(cafeId));
       } else {
-        const { blobs } = await list({ prefix: META });
+        const { blobs } = await list({ prefix: META(cafeId) });
         if (blobs.length) await del(blobs.map((b) => b.pathname));
       }
 
       // Images last: a record pointing at a deleted image would render broken,
       // whereas an image with no record is simply unreferenced.
-      const { blobs: photos } = await list({ prefix: 'selfies/' });
+      const { blobs: photos } = await list({ prefix: `selfies/${cafeId}/` });
       if (photos.length) await del(photos.map((b) => b.pathname));
 
       recordCache.clear();
-      invalidate();
+      invalidate(cafeId);
       return { removed: records.length };
     },
     /** Streams a private blob back through the function. */

@@ -1,11 +1,20 @@
 /**
- * The Brew House — Selfie Wall (POC)
+ * The Brew House — Selfie Wall
  *
- * Express app for all three pages. Persistence lives behind store.js, which
- * uses disk + memory locally and Vercel Blob + Redis when deployed.
+ * Express app for every page. One deployment serves many cafes:
  *
- * Exports the app so api/index.js can mount it as a Vercel function; only
- * starts a listener when run directly (`npm start`).
+ *   /<cafe>              the display screen, public, no login — a kiosk browser
+ *                        that hit a login wall at 6am would show a sign-in box
+ *                        to an empty room instead of a menu board.
+ *   /<cafe>/upload       the phone page the QR code points at.
+ *   /admin               staff sign in here; owners pick a cafe, staff go
+ *                        straight to their own.
+ *   /admin/<cafe>        moderation.
+ *   /admin/<cafe>/board  the menu board editor.
+ *
+ * Persistence is behind store.js (selfies) and cafes.js (cafes and boards);
+ * accounts are behind auth.js. Exports the app so api/index.js can mount it as
+ * a Vercel function; only listens when run directly (`npm start`).
  */
 
 const path = require('path');
@@ -15,13 +24,15 @@ const multer = require('multer');
 const QRCode = require('qrcode');
 
 const store = require('./store');
+const cafes = require('./cafes');
+const auth = require('./auth');
 const moderation = require('./moderate');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-/* Uploads are held in memory and handed to the store, which decides whether
-   they land on disk or in Blob. */
+/* Uploads are held in memory and handed on, so a photo can be refused by the
+   moderation filter before anything touches disk or an object store. */
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 12 * 1024 * 1024 },
@@ -31,22 +42,174 @@ const upload = multer({
   },
 });
 
+/* Board artwork is a logo or a product shot, not a phone camera dump. The
+   smaller cap keeps a mis-drop from filling the server's disk, and SVG is
+   allowed here because logos usually are one. */
+const boardImage = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 4 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype && file.mimetype.startsWith('image/')) return cb(null, true);
+    cb(new Error('Only image files are allowed'));
+  },
+});
+
 app.use(express.json());
 app.use('/uploads', express.static(store.UPLOAD_DIR, { maxAge: '1h' }));
 app.use(express.static(path.join(__dirname, 'public')));
-
-/* ---------------------------------------------------------------- pages -- */
+app.use(auth.attach());
 
 const page = (file) => (req, res) => res.sendFile(path.join(__dirname, 'public', file));
 
-app.get('/', (req, res) => res.redirect('/screen'));
-app.get('/screen', page('screen.html'));
-app.get('/upload', page('upload.html'));
-app.get('/admin', page('admin.html'));
+/* ----------------------------------------------------------------- auth -- */
 
-/* ------------------------------------------------------------------ api -- */
+app.post('/api/auth/login', async (req, res, next) => {
+  try {
+    const { email, password } = req.body || {};
+    const { session, profile } = await auth.login(email, password);
+    auth.setSession(res, session);
+    res.json({ profile, next: await landingFor(profile) });
+  } catch (err) {
+    next(err);
+  }
+});
 
-app.post('/api/upload', upload.single('photo'), async (req, res, next) => {
+app.post('/api/auth/logout', async (req, res, next) => {
+  try {
+    await auth.logout(req, res);
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Everything the admin shell needs to draw itself: who you are, what you can reach. */
+app.get('/api/auth/me', async (req, res, next) => {
+  try {
+    if (!req.profile) return res.status(401).json({ error: 'Sign in to continue.', signedOut: true });
+    res.json({
+      profile: req.profile,
+      authEnabled: auth.enabled,
+      cafes: await visibleCafes(req.profile),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* ---------------------------------------------------------------- owner -- */
+
+app.get('/api/cafes', auth.requireOwner, async (req, res, next) => {
+  try {
+    res.json(await cafes.list());
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post('/api/cafes', auth.requireOwner, async (req, res, next) => {
+  try {
+    const { id, name } = req.body || {};
+    res.status(201).json(await cafes.create({ id, name }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.patch('/api/cafes/:cafeId', auth.requireOwner, async (req, res, next) => {
+  try {
+    const updated = await cafes.update(req.params.cafeId, { name: req.body?.name });
+    if (!updated) return res.status(404).json({ error: 'No such cafe.' });
+    res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Removes a cafe, its board images and every selfie ever sent to it. The owner
+ * console asks twice before calling this.
+ */
+app.delete('/api/cafes/:cafeId', auth.requireOwner, async (req, res, next) => {
+  try {
+    const { cafeId } = req.params;
+    if (!(await cafes.get(cafeId))) return res.status(404).json({ error: 'No such cafe.' });
+    // Selfies first, while the cafe row is still there to scope the delete by.
+    const { removed } = await store.clear(cafeId);
+    await cafes.remove(cafeId);
+    res.json({ ok: true, removedSubmissions: removed });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.get('/api/users', auth.requireOwner, async (req, res, next) => {
+  try {
+    res.json(await auth.listUsers());
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post('/api/users', auth.requireOwner, async (req, res, next) => {
+  try {
+    const { email, password, role, cafeId } = req.body || {};
+    res.status(201).json(await auth.createUser({ email, password, role, cafeId }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.patch('/api/users/:id', auth.requireOwner, async (req, res, next) => {
+  try {
+    if (req.params.id === req.profile.id && req.body?.role && req.body.role !== 'owner') {
+      // Demoting the last owner would leave nobody able to create cafes or
+      // staff, with no way back in short of editing the database by hand.
+      return res.status(400).json({ error: 'You cannot remove your own owner role.' });
+    }
+    const updated = await auth.updateUser(req.params.id, req.body || {});
+    if (!updated) return res.status(404).json({ error: 'No such user.' });
+    res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.delete('/api/users/:id', auth.requireOwner, async (req, res, next) => {
+  try {
+    if (req.params.id === req.profile.id) {
+      return res.status(400).json({ error: 'You cannot delete your own account.' });
+    }
+    await auth.deleteUser(req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* ------------------------------------------------------- public per cafe -- */
+
+/** 404s an unknown cafe once, so every route below can assume it exists. */
+async function loadCafe(req, res, next) {
+  try {
+    const cafe = await cafes.get(req.params.cafeId);
+    if (!cafe) return res.status(404).json({ error: 'No such cafe.' });
+    req.cafe = cafe;
+    next();
+  } catch (err) {
+    next(err);
+  }
+}
+
+app.get('/api/cafes/:cafeId/board', loadCafe, async (req, res, next) => {
+  try {
+    res.json(await cafes.getBoard(req.params.cafeId));
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post('/api/cafes/:cafeId/upload', loadCafe, upload.single('photo'), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'A photo is required' });
 
@@ -59,7 +222,7 @@ app.post('/api/upload', upload.single('photo'), async (req, res, next) => {
     const verdict = await moderation.moderate({ name, message, file: req.file });
     if (!verdict.allowed) {
       console.warn(
-        `[moderation] blocked ${verdict.blocked.field} from "${name}" — ` +
+        `[moderation] blocked ${verdict.blocked.field} from "${name}" at ${req.params.cafeId} — ` +
         `${verdict.blocked.categories.join(', ')}`
       );
       return res.status(422).json({
@@ -69,44 +232,41 @@ app.post('/api/upload', upload.single('photo'), async (req, res, next) => {
       });
     }
 
-    const submission = await store.add(name, message, req.file, {
+    const submission = await store.add(req.params.cafeId, name, message, req.file, {
       checked: verdict.checked,
-      // Only carried when something could not be checked; the moderation page
-      // uses it to say why a photo arrived unverified.
       skipped: verdict.skipped.length ? verdict.skipped : undefined,
       at: Date.now(),
     });
-    const all = await store.list();
+    const all = await store.list(req.params.cafeId);
     res.status(201).json({ ...submission, position: pendingPosition(all, submission.id) });
   } catch (err) {
     next(err);
   }
 });
 
-app.get('/api/submissions', async (req, res, next) => {
+app.get('/api/cafes/:cafeId/queue', loadCafe, async (req, res, next) => {
   try {
-    // Newest first — moderators care about the freshest arrivals.
-    const all = await store.list();
-    res.json(all.sort((a, b) => b.submittedAt - a.submittedAt));
+    res.json(approvedQueue(await store.list(req.params.cafeId)));
   } catch (err) {
     next(err);
   }
 });
 
-app.get('/api/queue', async (req, res, next) => {
+app.get('/api/cafes/:cafeId/wall', loadCafe, async (req, res, next) => {
   try {
-    res.json(approvedQueue(await store.list()));
+    res.json(await store.getWall(req.params.cafeId));
   } catch (err) {
     next(err);
   }
 });
 
-app.get('/api/status/:id', async (req, res, next) => {
+app.get('/api/cafes/:cafeId/status/:id', loadCafe, async (req, res, next) => {
   try {
-    const submission = await store.get(req.params.id);
+    const { cafeId, id } = req.params;
+    const submission = await store.get(cafeId, id);
     if (!submission) return res.status(404).json({ error: 'Not found' });
 
-    const all = await store.list();
+    const all = await store.list(cafeId);
     const queue = approvedQueue(all);
     const queueIndex = queue.findIndex((s) => s.id === submission.id);
 
@@ -121,21 +281,9 @@ app.get('/api/status/:id', async (req, res, next) => {
   }
 });
 
-for (const [action, status] of [['approve', 'approved'], ['reject', 'rejected']]) {
-  app.post(`/api/submissions/:id/${action}`, async (req, res, next) => {
-    try {
-      const updated = await store.setStatus(req.params.id, status);
-      if (!updated) return res.status(404).json({ error: 'Not found' });
-      res.json(updated);
-    } catch (err) {
-      next(err);
-    }
-  });
-}
-
-app.get('/api/qr', async (req, res, next) => {
+app.get('/api/cafes/:cafeId/qr', loadCafe, async (req, res, next) => {
   try {
-    const target = `${publicBase(req)}/upload`;
+    const target = `${publicBase(req)}/${req.params.cafeId}/upload`;
     const dataUrl = await QRCode.toDataURL(target, {
       width: 512,
       margin: 1,
@@ -148,56 +296,15 @@ app.get('/api/qr', async (req, res, next) => {
 });
 
 /**
- * Wipes every submission and its stored image. Irreversible — the admin page
- * requires a second click before it calls this.
- */
-app.delete('/api/submissions', async (req, res, next) => {
-  try {
-    res.json(await store.clear());
-  } catch (err) {
-    next(err);
-  }
-});
-
-app.get('/api/wall', async (req, res, next) => {
-  try {
-    res.json(await store.getWall());
-  } catch (err) {
-    next(err);
-  }
-});
-
-app.post('/api/wall', async (req, res, next) => {
-  try {
-    const { mode } = req.body || {};
-    if (!store.WALL_MODES.includes(mode)) {
-      return res.status(400).json({ error: `mode must be one of ${store.WALL_MODES.join(', ')}` });
-    }
-    res.json(await store.setWall(mode));
-  } catch (err) {
-    next(err);
-  }
-});
-
-app.get('/api/health', async (req, res) => {
-  res.json({
-    ok: true,
-    storage: store.describe(),
-    cloud: store.isCloud,
-    moderation: { enabled: moderation.enabled, detail: moderation.describe() },
-  });
-});
-
-/**
  * Serves a photo held in a private Blob store, which a browser cannot fetch
  * directly. Public stores never reach this route — their records already point
  * at the CDN URL.
  */
-app.get('/api/photo/:id', async (req, res, next) => {
+app.get('/api/cafes/:cafeId/photo/:id', loadCafe, async (req, res, next) => {
   try {
     if (typeof store.openPhoto !== 'function') return res.status(404).end();
 
-    const submission = await store.get(req.params.id);
+    const submission = await store.get(req.params.cafeId, req.params.id);
     if (!submission) return res.status(404).json({ error: 'Not found' });
 
     const photo = await store.openPhoto(submission);
@@ -212,7 +319,188 @@ app.get('/api/photo/:id', async (req, res, next) => {
   }
 });
 
+/* ------------------------------------------------------ guarded per cafe -- */
+
+app.get('/api/cafes/:cafeId/submissions', auth.requireCafe, loadCafe, async (req, res, next) => {
+  try {
+    // Newest first — moderators care about the freshest arrivals.
+    const all = await store.list(req.params.cafeId);
+    res.json(all.sort((a, b) => b.submittedAt - a.submittedAt));
+  } catch (err) {
+    next(err);
+  }
+});
+
+for (const [action, status] of [['approve', 'approved'], ['reject', 'rejected']]) {
+  app.post(
+    `/api/cafes/:cafeId/submissions/:id/${action}`,
+    auth.requireCafe, loadCafe,
+    async (req, res, next) => {
+      try {
+        const updated = await store.setStatus(req.params.cafeId, req.params.id, status);
+        if (!updated) return res.status(404).json({ error: 'Not found' });
+        res.json(updated);
+      } catch (err) {
+        next(err);
+      }
+    }
+  );
+}
+
+/** Wipes this cafe's submissions and their images. The admin page double-clicks. */
+app.delete('/api/cafes/:cafeId/submissions', auth.requireCafe, loadCafe, async (req, res, next) => {
+  try {
+    res.json(await store.clear(req.params.cafeId));
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post('/api/cafes/:cafeId/wall', auth.requireCafe, loadCafe, async (req, res, next) => {
+  try {
+    const { mode } = req.body || {};
+    if (!store.WALL_MODES.includes(mode)) {
+      return res.status(400).json({ error: `mode must be one of ${store.WALL_MODES.join(', ')}` });
+    }
+    res.json(await store.setWall(req.params.cafeId, mode));
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.put('/api/cafes/:cafeId/board', auth.requireCafe, loadCafe, async (req, res, next) => {
+  try {
+    const saved = await cafes.setBoard(req.params.cafeId, req.body);
+    if (!saved) return res.status(404).json({ error: 'No such cafe.' });
+    res.json(saved);
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post('/api/cafes/:cafeId/board/reset', auth.requireCafe, loadCafe, async (req, res, next) => {
+  try {
+    res.json(await cafes.resetBoard(req.params.cafeId));
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post(
+  '/api/cafes/:cafeId/board/image',
+  auth.requireCafe, loadCafe, boardImage.single('image'),
+  async (req, res, next) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: 'An image is required' });
+      res.status(201).json({ url: await cafes.saveImage(req.params.cafeId, req.file) });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/* ---------------------------------------------------------------- pages -- */
+
+app.get('/', (req, res) => {
+  if (req.profile) return res.redirect('/admin');
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+/** Owners choose a cafe; staff only ever have one, so skip the choosing. */
+app.get('/admin', auth.requirePage, async (req, res, next) => {
+  try {
+    const target = await landingFor(req.profile);
+    if (target !== '/admin') return res.redirect(target);
+    res.sendFile(path.join(__dirname, 'public', 'cafes.html'));
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.get('/admin/cafes', auth.requirePage, (req, res) => {
+  if (req.profile.role !== 'owner') return res.redirect('/admin');
+  res.sendFile(path.join(__dirname, 'public', 'cafes.html'));
+});
+
+app.get('/admin/:cafeId', auth.requirePage, guardCafePage, page('admin.html'));
+app.get('/admin/:cafeId/board', auth.requirePage, guardCafePage, page('board.html'));
+
+app.get('/api/health', async (req, res) => {
+  res.json({
+    ok: true,
+    storage: store.describe(),
+    cloud: store.isCloud,
+    cafes: cafes.driver,
+    auth: { enabled: auth.enabled, detail: auth.describe() },
+    moderation: { enabled: moderation.enabled, detail: moderation.describe() },
+  });
+});
+
+/* The kiosk URLs from before cafes existed. Sending them to the only cafe
+   keeps a TV that was already pointed at /screen working after the upgrade. */
+for (const [legacy, suffix] of [['/screen', ''], ['/upload', '/upload']]) {
+  app.get(legacy, async (req, res, next) => {
+    try {
+      const all = await cafes.list();
+      if (all.length === 1) return res.redirect(`/${all[0].id}${suffix}`);
+      res.redirect('/');
+    } catch (err) {
+      next(err);
+    }
+  });
+}
+
+/**
+ * The public screen and phone page, last so they cannot shadow anything above.
+ * An unknown cafe gets the landing page rather than a bare 404: the usual cause
+ * is a typo in a URL somebody read off a sticky note.
+ */
+app.get('/:cafeId', publicCafePage('screen.html'));
+app.get('/:cafeId/upload', publicCafePage('upload.html'));
+
+function publicCafePage(file) {
+  return async (req, res, next) => {
+    const { cafeId } = req.params;
+    if (cafes.RESERVED.has(cafeId)) return next();
+    try {
+      if (!(await cafes.get(cafeId))) {
+        return res.status(404).sendFile(path.join(__dirname, 'public', 'login.html'));
+      }
+      res.sendFile(path.join(__dirname, 'public', file));
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
+/** Page-level cafe guard: a redirect rather than the API's JSON 404. */
+async function guardCafePage(req, res, next) {
+  if (!auth.canAccess(req.profile, req.params.cafeId)) return res.redirect('/admin');
+  try {
+    if (!(await cafes.get(req.params.cafeId))) return res.redirect('/admin');
+    next();
+  } catch (err) {
+    next(err);
+  }
+}
+
 /* -------------------------------------------------------------- helpers -- */
+
+async function visibleCafes(profile) {
+  if (profile.role === 'owner') return cafes.list();
+  if (!profile.cafeId) return [];
+  const cafe = await cafes.get(profile.cafeId);
+  return cafe ? [{ id: cafe.id, name: cafe.name }] : [];
+}
+
+/** Where signing in should drop you. */
+async function landingFor(profile) {
+  if (profile.role === 'owner') return '/admin/cafes';
+  const mine = await visibleCafes(profile);
+  // Staff with no cafe assigned yet: the picker explains that rather than
+  // bouncing them to a cafe they cannot see.
+  return mine.length === 1 ? `/admin/${mine[0].id}` : '/admin';
+}
 
 function approvedQueue(all) {
   // Approval order, so the newest approved photo shows up last in the rotation.
@@ -262,13 +550,21 @@ app.use((err, req, res, next) => {
 
 if (require.main === module) {
   const base = (process.env.PUBLIC_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
-  app.listen(PORT, () => {
-    console.log(`\n  ☕  The Brew House — Selfie Wall`);
+  app.listen(PORT, async () => {
+    console.log(`\n  ☕  Selfie Wall`);
     console.log(`      Storage: ${store.describe()}`);
+    console.log(`      Cafes  : ${cafes.driver}`);
+    console.log(`      Sign-in: ${auth.describe()}`);
     console.log(`      Filter : ${moderation.describe()}`);
-    console.log(`      Screen : ${base}/screen`);
-    console.log(`      Upload : ${base}/upload`);
-    console.log(`      Admin  : ${base}/admin\n`);
+    console.log(`      Admin  : ${base}/admin`);
+    try {
+      for (const cafe of await cafes.list()) {
+        console.log(`      Screen : ${base}/${cafe.id}   (${cafe.name})`);
+      }
+    } catch (err) {
+      console.log(`      Screen : could not list cafes — ${err.message}`);
+    }
+    console.log('');
   });
 }
 

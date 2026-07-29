@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Join the Selfie Wall — The Brew House</title>
+<title>Join the Selfie Wall</title>
+<base href="/">
 <link rel="stylesheet" href="/theme.css">
 <style>
   body {
@@ -273,8 +274,8 @@
 <div class="wrap">
 
   <header>
-    <img class="crest" src="assets/emblem.png" alt="">
-    <h1 class="brand">The Brew House <em>—</em> Selfie Wall</h1>
+    <img class="crest" id="crest" src="/assets/emblem.png" alt="">
+    <h1 class="brand" id="brand"><span id="cafe-name">Selfie Wall</span></h1>
     <p class="tagline">Get on the big screen</p>
   </header>
 
@@ -334,6 +335,26 @@ const POLL_MS = 5000;
 const $ = (id) => document.getElementById(id);
 const form = $('form');
 let statusTimer = null;
+
+/* /<cafe>/upload — the QR code on each screen points at its own cafe, so the
+   phone knows which wall it is joining without the customer choosing. */
+const CAFE_ID = location.pathname.split('/').filter(Boolean)[0];
+const at = (suffix) => `/api/cafes/${CAFE_ID}${suffix}`;
+
+/* The phone page wears the cafe's branding: someone who scanned a code in one
+   cafe should not see another's name on their screen. */
+fetch(at('/board'))
+  .then((r) => r.json())
+  .then((board) => {
+    if (board.name) {
+      $('cafe-name').textContent = `${board.name} — Selfie Wall`;
+      document.title = `Join the Selfie Wall — ${board.name}`;
+    }
+    // The tagline slot keeps its instruction ("Get on the big screen") — on a
+    // phone that is what the person needs, not the cafe's motto.
+    if (board.logo) $('crest').src = board.logo;
+  })
+  .catch(() => {});
 
 /* ---- live preview ---- */
 
@@ -439,7 +460,7 @@ form.addEventListener('submit', async (e) => {
     const body = new FormData(form);
     // Submit the downscaled copy rather than what came off the camera.
     if (prepared) body.set('photo', prepared, prepared.name);
-    const res = await fetch('/api/upload', { method: 'POST', body });
+    const res = await fetch(at('/upload'), { method: 'POST', body });
     const data = await res.json();
     if (!res.ok) {
       // Carry the operator-facing detail alongside the friendly message; the
@@ -479,7 +500,7 @@ form.addEventListener('submit', async (e) => {
 function trackStatus(id) {
   const check = async () => {
     try {
-      const data = await (await fetch(`/api/status/${id}`)).json();
+      const data = await (await fetch(at(`/status/${id}`))).json();
       renderStatus(data);
       if (data.status !== 'pending') clearInterval(statusTimer);
     } catch (err) {

@@ -1,8 +1,11 @@
-# The Brew House — Cafe Selfie Wall (POC)
+# Cafe Selfie Wall
 
-A three-screen proof of concept: customers scan a QR code on the cafe TV, upload a
-selfie from their phone, a staff member approves it, and it joins the rotation on
-the big screen.
+Digital signage for cafes. Each site gets a menu board on its TV; customers scan
+the QR code on it, upload a selfie from their phone, a staff member approves it,
+and it takes over the screen for fifteen seconds.
+
+One deployment serves many cafes. Staff sign in and see only their own site;
+owners see all of them and edit the boards.
 
 ## Running it
 
@@ -11,13 +14,23 @@ npm install
 npm start
 ```
 
-Then open:
+| Page | URL | Runs on | Sign-in |
+| --- | --- | --- | --- |
+| Display screen | `/<cafe>` | The cafe TV, fullscreen kiosk mode | No |
+| Upload | `/<cafe>/upload` | The customer's phone, opened via QR | No |
+| Sign in | `/` | Staff laptop or tablet | — |
+| Cafes and accounts | `/admin/cafes` | Owner | Yes |
+| Moderation | `/admin/<cafe>` | Staff | Yes |
+| Menu board editor | `/admin/<cafe>/board` | Staff | Yes |
 
-| Page | URL | Runs on |
-| --- | --- | --- |
-| Display screen | http://localhost:3000/screen | The cafe TV, fullscreen kiosk mode |
-| Upload | http://localhost:3000/upload | The customer's phone (opened via QR) |
-| Moderation | http://localhost:3000/admin | Staff laptop or tablet |
+The display is deliberately public. A kiosk browser that lost its session
+overnight would greet a room full of customers with a login box and nobody there
+to type into it, so the screen needs no account — everything behind it does.
+
+Out of the box there is one cafe, `brew-house`, so the screen is at
+http://localhost:3000/brew-house. With no Supabase configured the app runs on
+local disk with sign-in switched off, which is what keeps `npm start` working on
+a laptop with no accounts anywhere.
 
 `localhost` only works if the phone is the same machine. To let real phones scan
 the QR code, point `PUBLIC_URL` at an address they can reach:
@@ -27,6 +40,68 @@ PUBLIC_URL=http://192.168.1.20:3000 npm start
 ```
 
 That URL is what gets encoded into the QR code and printed at startup.
+
+## Cafes and accounts
+
+Cafes and staff both live in Supabase, so this section needs
+[Supabase configured](#supabase-recommended-when-hosted) first.
+
+A cafe's id is the slug in its own URL, so pick something readable:
+`domain.com/brew-house` is the screen and `domain.com/brew-house/upload` is the
+phone page. Ids are lowercase letters, numbers and hyphens, and a handful of
+words the app already uses (`admin`, `api`, `assets`, …) are refused rather than
+creating a cafe nobody could reach.
+
+There are two roles:
+
+| | Owner | Staff |
+| --- | --- | --- |
+| Moderate selfies | every cafe | their own cafe |
+| Edit the menu board | every cafe | their own cafe |
+| Create cafes and accounts | yes | no |
+
+**Getting the first owner in.** Create a user in the Supabase dashboard
+(*Authentication → Users → Add user*, with "auto confirm" on), then sign in at
+`/`. The first account to sign in becomes the owner — somebody has to be, and
+the alternative is no owner existing to promote anyone. From there, add cafes
+and staff from `/admin/cafes`.
+
+Staff created afterwards arrive with no cafe assigned, which grants nothing until
+an owner picks one for them. A staff member asking for another cafe's data gets
+a 404 rather than a 403: a 403 would confirm that cafe exists, which hands
+anyone with one account a directory of every site on the system.
+
+## The menu board
+
+`/admin/<cafe>/board` edits everything the screen renders: cafe name, tagline,
+established year, logo, the section heading, the items, the bottom banner, and
+the QR panel's copy and steps. The screen re-reads the board once a minute, so a
+save reaches the TV on its own — nobody has to walk over to it.
+
+**Images** are uploaded through the editor and written into the app's own folder,
+under `public/assets/board/<cafe>/`. Images a board no longer refers to are
+deleted after a save, so replacing a photo repeatedly doesn't accumulate junk.
+
+> This means board images need a writable disk. On a serverless host
+> (Vercel, Cloud Functions) the filesystem is read-only and the upload will
+> refuse with a message saying so. Selfies are unaffected — they go to the
+> configured object store either way.
+
+**A rotating board.** More items than fit on the panel are dealt out a page at a
+time and the page turns on a timer, the way the boards in a coffee-shop chain do.
+Two settings control it: how many items show at once, and how long each page
+holds. The editor spells out what they add up to — "8 items across 3 pages, full
+cycle 24s" — because the two numbers on their own don't tell you whether the
+whole menu gets seen. Page turns pause while a selfie has the screen, so nothing
+cycles past unwatched, and a menu that fits on one page simply doesn't rotate.
+
+Everything is trimmed and clamped server-side rather than rejected. A tagline
+three times too long for the header is a layout problem on a TV nobody is
+watching; refusing the save would be the worse outcome.
+
+`public/menu.json` stays in the repo as the shipped default. A cafe nobody has
+edited renders it, so a brand new cafe shows a complete board instead of a blank
+screen, and *Reset to defaults* in the editor drops back to it.
 
 ## Automatic moderation
 
@@ -98,8 +173,10 @@ the local driver stays the default, so `npm start` still needs no cloud account.
 ```json
 {
   "ok": true,
-  "storage": "firebase (Cloud Storage + Firestore)",
+  "storage": "supabase (Postgres + Storage)",
   "cloud": true,
+  "cafes": "supabase",
+  "auth": { "enabled": true, "detail": "supabase auth" },
   "moderation": { "enabled": true, "detail": "omni-moderation-latest" }
 }
 ```
@@ -113,9 +190,15 @@ in **one query no matter how many photos there are**, which is why this is the
 default recommendation. It also covers both halves — queue and images — in one
 service.
 
+Supabase carries three things here: the selfie queue, the cafes and their menu
+boards, and staff sign-in through Supabase Auth. Configure it and multi-cafe and
+logins both switch themselves on; leave it unset and the app falls back to one
+cafe on local disk with no sign-in.
+
 1. Create a project at supabase.com.
-2. Open the **SQL Editor**, paste [`supabase.sql`](supabase.sql) and run it. That
-   creates the two tables and a public `selfies` storage bucket.
+2. Open the **SQL Editor**, paste [`supabase.sql`](supabase.sql) and run it. It
+   creates the tables, a `brew-house` cafe to start with, and a public `selfies`
+   storage bucket. It is safe to re-run on an existing project.
 3. Set two environment variables on the host (Vercel → Settings → Environment
    Variables), from *Project Settings → API*:
    - `SUPABASE_URL` — the Project URL, `https://<ref>.supabase.co`
@@ -123,6 +206,8 @@ service.
      projects, or the legacy `service_role` JWT). The **publishable**/anon key is
      not used by this app and won't work here.
 4. Redeploy.
+5. Create your first user in *Authentication → Users → Add user* (auto-confirm
+   on), then sign in at `/`. The first account to sign in becomes the owner.
 
 The secret key must stay server-side — it bypasses row-level security, and the
 browser never sees it. Keep it in the host's environment variables: never in the
@@ -209,17 +294,25 @@ no configuration.
 ## How it works
 
 - **Storage is deliberately throwaway locally.** Submissions live in an in-memory
-  array and images land in `uploads/`, so restarting the server empties the wall.
-  There is no auth. See *Deploying* above for the hosted drivers that replace
-  this.
+  array and images land in `uploads/`, so restarting the server empties the wall,
+  and cafes live in a `data/cafes.json` the app writes for itself. Sign-in is off
+  in this mode. It exists so the app boots with no accounts anywhere — multi-cafe
+  and staff logins both need Supabase. See *Deploying* above.
+- **One deployment, many cafes, scoped at the query.** Every per-cafe route
+  carries its cafe in the path, and the store scopes each lookup by it rather
+  than fetching and filtering — so a submission id guessed from another cafe
+  simply misses instead of leaking. Wall mode, the queue, the board and the
+  uploaded images are all per cafe.
 - **The automatic filter runs before anything is stored.** Name, message and
   photo go to OpenAI's moderation endpoint while the image is still a buffer in
   memory; a flagged upload is refused and never written. It fails open, so an
   outage leaves a human moderator as the gate rather than closing the wall. See
   *Automatic moderation* above.
-- **Everything is polling, every 5-6 seconds.** The screen polls `/api/queue`, the
-  admin page polls `/api/submissions`, and the phone polls `/api/status/:id` after
-  submitting. No WebSockets to keep the moving parts down.
+- **Everything is polling, every 5-6 seconds.** The screen polls its cafe's
+  queue, the admin page polls its submissions, and the phone polls its own
+  status after submitting. The screen also re-reads its board once a minute, so
+  an edit reaches the TV without anyone touching it. No WebSockets, to keep the
+  moving parts down.
 - **Polling is metered when hosted, so reads are cached.** Re-reading every record
   on every tick is what makes a Blob store expensive — at a 3s poll a ten-photo
   wall cost 1 + 10 origin reads per client per tick, hundreds of thousands of
@@ -284,20 +377,36 @@ no configuration.
 
 ## API
 
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| POST | `/api/upload` | Multipart (`name`, `message`, `photo`) → moderates, then saves the image and queues it as `pending`. `422` with `{ "moderation": "blocked", "field": … }` if the filter rejects it |
-| GET | `/api/submissions` | Every submission, newest first (admin) |
-| GET | `/api/queue` | Approved submissions in approval order (display screen) |
-| GET | `/api/status/:id` | One submission's status and queue position (phone) |
-| POST | `/api/submissions/:id/approve` | Mark approved |
-| POST | `/api/submissions/:id/reject` | Mark rejected |
-| GET | `/api/qr` | QR code for the upload page, as a data URL |
-| DELETE | `/api/submissions` | Deletes every submission and its stored image |
-| GET | `/api/wall` | Current wall mode (`loop` or `live`) |
-| POST | `/api/wall` | Switch wall mode: `{ "mode": "loop" \| "live" }` |
-| GET | `/api/health` | Which storage driver is active, and whether the moderation filter is on |
-| GET | `/api/photo/:id` | Streams a photo from a private Blob store (unused on public stores) |
+| Method | Endpoint | Purpose | Sign-in |
+| --- | --- | --- | --- |
+| POST | `/api/auth/login` | Email + password, sets the session cookies | — |
+| POST | `/api/auth/logout` | Clears them | — |
+| GET | `/api/auth/me` | Who you are and which cafes you can reach | yes |
+| GET | `/api/cafes` | Every cafe | owner |
+| POST | `/api/cafes` | Create one: `{ "id": "brew-house", "name": "…" }` | owner |
+| PATCH | `/api/cafes/:cafe` | Rename | owner |
+| DELETE | `/api/cafes/:cafe` | Delete it, its board images and every selfie sent to it | owner |
+| GET · POST · PATCH · DELETE | `/api/users…` | Staff accounts | owner |
+| GET | `/api/cafes/:cafe/board` | The menu board the screen renders | no |
+| PUT | `/api/cafes/:cafe/board` | Save it | yes |
+| POST | `/api/cafes/:cafe/board/image` | Upload a logo or item photo | yes |
+| POST | `/api/cafes/:cafe/board/reset` | Back to the shipped defaults | yes |
+| POST | `/api/cafes/:cafe/upload` | Multipart (`name`, `message`, `photo`) → moderates, then queues it as `pending`. `422` with `{ "moderation": "blocked", "field": … }` if the filter rejects it | no |
+| GET | `/api/cafes/:cafe/queue` | Approved selfies in approval order (the screen) | no |
+| GET | `/api/cafes/:cafe/status/:id` | One selfie's status and queue position (the phone) | no |
+| GET | `/api/cafes/:cafe/qr` | QR code for this cafe's upload page, as a data URL | no |
+| GET | `/api/cafes/:cafe/wall` | Current wall mode (`loop` or `live`) | no |
+| POST | `/api/cafes/:cafe/wall` | Switch it: `{ "mode": "loop" \| "live" }` | yes |
+| GET | `/api/cafes/:cafe/submissions` | Every selfie for this cafe, newest first | yes |
+| POST | `/api/cafes/:cafe/submissions/:id/approve` | Mark approved | yes |
+| POST | `/api/cafes/:cafe/submissions/:id/reject` | Mark rejected | yes |
+| DELETE | `/api/cafes/:cafe/submissions` | Delete every selfie for this cafe and its stored image | yes |
+| GET | `/api/cafes/:cafe/photo/:id` | Streams a photo from a private Blob store (unused on public stores) | no |
+| GET | `/api/health` | Which drivers are active, and whether sign-in and the filter are on | no |
+
+Every per-cafe route carries the cafe in its path, and the store scopes each
+lookup by it rather than filtering afterwards — so an id belonging to another
+cafe simply misses.
 
 Uploads are capped at 12 MB and must be images. The upload is held in memory and
 only persisted once the name and file both validate, so a rejected submission
@@ -307,7 +416,9 @@ never leaves anything behind.
 
 ```
 server.js          Express app and routes (exports the app; listens only via npm start)
-store.js           storage drivers: local disk, Supabase, Firebase, or Vercel Blob
+store.js           selfie storage drivers: local disk, Supabase, Firebase, or Vercel Blob
+cafes.js           cafes and their menu boards, plus board image uploads
+auth.js            staff accounts and role checks, on Supabase Auth
 moderate.js        OpenAI moderation for the name, message and photo
 supabase.sql       Supabase schema — run once in the SQL Editor
 index.js           Firebase Cloud Functions entry point
@@ -318,6 +429,11 @@ api/index.js       Vercel serverless entry point
 vercel.json        routes non-static requests to the Express app
 public/menu.json   board content: items, prices, copy — edit this, not the HTML
 public/theme.css   shared cafe palette + the branded photo frame
+public/admin.css   shared chrome for the signed-in pages
+public/admin-shell.js  session, header and API helper shared by those pages
+public/login.html  staff sign-in
+public/cafes.html  owner console: cafes and accounts
+public/board.html  menu board editor
 public/screen.html display screen
 public/upload.html phone upload page
 public/admin.html  moderation dashboard
