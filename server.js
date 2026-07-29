@@ -15,6 +15,7 @@ const multer = require('multer');
 const QRCode = require('qrcode');
 
 const store = require('./store');
+const moderation = require('./moderate');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -53,7 +54,28 @@ app.post('/api/upload', upload.single('photo'), async (req, res, next) => {
     const message = String(req.body.message || '').trim().slice(0, 100);
     if (!name) return res.status(400).json({ error: 'A name is required' });
 
-    const submission = await store.add(name, message, req.file);
+    /* Before store.add, not after: a flagged photo is refused while it is
+       still only a buffer in memory, so it is never written anywhere. */
+    const verdict = await moderation.moderate({ name, message, file: req.file });
+    if (!verdict.allowed) {
+      console.warn(
+        `[moderation] blocked ${verdict.blocked.field} from "${name}" — ` +
+        `${verdict.blocked.categories.join(', ')}`
+      );
+      return res.status(422).json({
+        error: verdict.blocked.message,
+        field: verdict.blocked.field,
+        moderation: 'blocked',
+      });
+    }
+
+    const submission = await store.add(name, message, req.file, {
+      checked: verdict.checked,
+      // Only carried when something could not be checked; the moderation page
+      // uses it to say why a photo arrived unverified.
+      skipped: verdict.skipped.length ? verdict.skipped : undefined,
+      at: Date.now(),
+    });
     const all = await store.list();
     res.status(201).json({ ...submission, position: pendingPosition(all, submission.id) });
   } catch (err) {
@@ -158,7 +180,12 @@ app.post('/api/wall', async (req, res, next) => {
 });
 
 app.get('/api/health', async (req, res) => {
-  res.json({ ok: true, storage: store.describe(), cloud: store.isCloud });
+  res.json({
+    ok: true,
+    storage: store.describe(),
+    cloud: store.isCloud,
+    moderation: { enabled: moderation.enabled, detail: moderation.describe() },
+  });
 });
 
 /**
@@ -238,6 +265,7 @@ if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`\n  ☕  The Brew House — Selfie Wall`);
     console.log(`      Storage: ${store.describe()}`);
+    console.log(`      Filter : ${moderation.describe()}`);
     console.log(`      Screen : ${base}/screen`);
     console.log(`      Upload : ${base}/upload`);
     console.log(`      Admin  : ${base}/admin\n`);

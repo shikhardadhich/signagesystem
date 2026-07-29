@@ -195,6 +195,14 @@
     word-break: break-word;
   }
 
+  /* Points at the field the filter objected to, so "try a different one"
+     doesn't leave someone re-reading the whole form. */
+  input.is-flagged,
+  .picker.is-flagged {
+    border-color: var(--bad);
+    box-shadow: 0 0 0 3px rgba(162, 69, 47, 0.28);
+  }
+
   .error {
     margin: 0.9rem 0 0;
     padding: 0.7rem 0.9rem;
@@ -400,9 +408,30 @@ $('photo').addEventListener('change', async (e) => {
 
 /* ---- submit ---- */
 
+/* ---- flagged-field highlight ---- */
+
+const FLAGGABLE = { name: () => $('name'), message: () => $('message'), photo: () => document.querySelector('.picker') };
+
+function clearFlags() {
+  for (const get of Object.values(FLAGGABLE)) get()?.classList.remove('is-flagged');
+}
+
+function flagField(field) {
+  const el = FLAGGABLE[field]?.();
+  if (!el) return;
+  el.classList.add('is-flagged');
+  el.focus?.();
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// Editing a flagged field clears its mark — the next attempt starts clean.
+for (const id of ['name', 'message']) $(id).addEventListener('input', () => $(id).classList.remove('is-flagged'));
+$('photo').addEventListener('change', () => document.querySelector('.picker').classList.remove('is-flagged'));
+
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   $('error').classList.add('hidden');
+  clearFlags();
   $('submit').disabled = true;
   $('submit').innerHTML = '<span class="spinner"></span>Sending…';
 
@@ -417,6 +446,12 @@ form.addEventListener('submit', async (e) => {
       // person debugging the wall is usually the person holding the phone.
       const err = new Error(data.error || 'Upload failed');
       err.detail = [data.storage, data.detail].filter(Boolean).join(' · ');
+      // A moderation refusal is the person's to fix, not the operator's — no
+      // storage diagnostics, just a pointer at the field that tripped.
+      if (data.moderation === 'blocked') {
+        err.detail = '';
+        err.field = data.field;
+      }
       throw err;
     }
 
@@ -433,6 +468,7 @@ form.addEventListener('submit', async (e) => {
       $('error').append(small);
     }
     $('error').classList.remove('hidden');
+    if (err.field) flagField(err.field);
     $('submit').disabled = false;
     $('submit').textContent = 'Send it to the wall';
   }

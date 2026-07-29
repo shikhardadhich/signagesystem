@@ -87,6 +87,47 @@
     padding: 0.2rem 0.6rem;
   }
 
+  /* ---- automatic filter status ---- */
+
+  .filter-note {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    font-size: 0.82rem;
+    line-height: 1.45;
+    border-radius: 10px;
+    padding: 0.6rem 0.8rem;
+    margin: 0 0 var(--s4);
+    background: rgba(93, 138, 90, 0.12);
+    border: 1px solid rgba(93, 138, 90, 0.4);
+    color: var(--mocha);
+  }
+
+  /* Filter off means every photo here is unvetted — say so loudly. */
+  .filter-note[data-state="off"] {
+    background: rgba(201, 151, 63, 0.14);
+    border-color: rgba(201, 151, 63, 0.55);
+  }
+
+  .filter-note b {
+    color: var(--coffee);
+  }
+
+  /* Per-row marker for the one case that matters: the filter is on, but this
+     photo slipped through while it was unreachable. */
+  .meta__unchecked {
+    display: inline-block;
+    margin: 0.35rem 0 0;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: #8a4a24;
+    background: rgba(201, 151, 63, 0.2);
+    border: 1px solid rgba(201, 151, 63, 0.6);
+    border-radius: var(--r-pill);
+    padding: 0.15rem 0.55rem;
+  }
+
   /* ---- filter tabs ---- */
 
   .tabs {
@@ -425,6 +466,7 @@
 <main>
   <section>
     <h2>Submissions <span class="count" id="sub-count">0</span></h2>
+    <p class="filter-note hidden" id="filter-note"></p>
     <div class="tabs" role="tablist" id="tabs"></div>
     <div id="list" aria-live="polite"></div>
   </section>
@@ -463,6 +505,9 @@ const FILTERS = [
 let filter = 'pending';
 let submissions = [];
 let wall = { mode: 'loop', liveSince: null };
+/* Whether the automatic filter is running. Fetched once — it comes from the
+   server's environment and cannot change while the process is up. */
+let autoFilter = null;
 /* Ids the moderator just decided on, so a click updates instantly instead of
    waiting up to 3s for the next poll to catch up. */
 const pendingDecisions = new Map();
@@ -499,6 +544,28 @@ function counts() {
 function render() {
   renderTabs();
   renderSubmissions();
+}
+
+/**
+ * Says plainly whether anything was screened before it got here. A moderator
+ * who assumes an automatic filter that is switched off is the failure mode
+ * worth spending a banner on.
+ */
+async function loadFilterState() {
+  try {
+    const health = await fetch('/api/health').then((r) => r.json());
+    autoFilter = health.moderation || { enabled: false };
+  } catch (err) {
+    return;
+  }
+
+  const note = $('filter-note');
+  note.dataset.state = autoFilter.enabled ? 'on' : 'off';
+  note.textContent = autoFilter.enabled
+    ? 'Names, messages and photos are screened automatically before they reach this page. Flagged uploads are refused and never appear here — you are the second pass, not the first.'
+    : 'Automatic screening is off, so nothing below has been checked. Every photo needs your eyes.';
+  note.classList.remove('hidden');
+  render();
 }
 
 function renderTabs() {
@@ -565,6 +632,16 @@ function renderSubmissions() {
     time.textContent = new Date(item.submittedAt).toLocaleTimeString();
     meta.append(name, message, time);
 
+    /* Only when the filter is meant to be running. With it off the banner
+       already says nothing was checked, and a badge on every row is noise. */
+    if (autoFilter?.enabled && item.moderation && item.moderation.checked === false) {
+      const warn = document.createElement('p');
+      warn.className = 'meta__unchecked';
+      warn.textContent = '⚠ arrived unscreened';
+      warn.title = `The automatic filter could not check this one (${describeSkips(item.moderation)}), so it came through unverified.`;
+      meta.append(warn);
+    }
+
     const actions = document.createElement('div');
     actions.className = 'actions';
     if (item.status === 'pending') {
@@ -583,6 +660,23 @@ function renderSubmissions() {
     row.append(thumb, meta, actions);
     list.append(row);
   }
+}
+
+const SKIP_COPY = {
+  timeout: 'the check timed out',
+  network: 'the filter was unreachable',
+  'bad-response': 'the filter returned nothing usable',
+  'too-large': 'the photo was too big to send',
+  'unsupported-type': 'that image format cannot be screened',
+  'no-api-key': 'no API key was configured',
+};
+
+function describeSkips(moderation) {
+  const skipped = moderation.skipped || [];
+  if (!skipped.length) return 'reason not recorded';
+  return skipped
+    .map((s) => SKIP_COPY[s.reason] || (s.reason.startsWith('http-') ? `the filter returned ${s.reason.slice(5)}` : s.reason))
+    .join('; ');
 }
 
 function button(label, variant, onClick) {
@@ -725,6 +819,7 @@ clearBtn.addEventListener('click', async () => {
   refresh();
 });
 
+loadFilterState();
 refresh();
 setInterval(refresh, POLL_MS);
 </script>

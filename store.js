@@ -47,13 +47,21 @@ function extensionFor(file) {
   return fromMime[file.mimetype] || '.jpg';
 }
 
-function newSubmission(name, message) {
+/**
+ * `moderation` records what the automatic filter managed to do:
+ * { checked: true } when every part was inspected, { checked: false, skipped }
+ * when it could not run. Nothing flagged ever gets this far — server.js
+ * refuses those before calling add() — so this exists to tell a moderator
+ * which photos arrived unverified and need a closer look.
+ */
+function newSubmission(name, message, moderation) {
   return {
     id: makeId(),
     name,
     message,
     url: null,
     status: 'pending',
+    moderation: moderation || { checked: false },
     submittedAt: Date.now(),
     decidedAt: null,
   };
@@ -103,7 +111,7 @@ function localDriver() {
       wall = nextWall(mode);
       return { ...wall };
     },
-    async add(name, message, file) {
+    async add(name, message, file, moderation) {
       if (!writable) {
         const err = new Error(
           "This deployment has no photo storage, so uploads can't be saved. " +
@@ -112,7 +120,7 @@ function localDriver() {
         err.status = 503;
         throw err;
       }
-      const submission = newSubmission(name, message);
+      const submission = newSubmission(name, message, moderation);
       const filename = `${submission.id}${extensionFor(file)}`;
       await fs.promises.writeFile(path.join(UPLOAD_DIR, filename), file.buffer);
       submission.url = `/uploads/${filename}`;
@@ -176,8 +184,8 @@ function firebaseDriver() {
       await wallRef.set(wall);
       return wall;
     },
-    async add(name, message, file) {
-      const submission = newSubmission(name, message);
+    async add(name, message, file, moderation) {
+      const submission = newSubmission(name, message, moderation);
       const objectPath = `selfies/${submission.id}${extensionFor(file)}`;
 
       // A download token gives a stable public URL without needing object ACLs,
@@ -259,6 +267,7 @@ function supabaseDriver() {
     url: s.url,
     path: s.path || null,
     status: s.status,
+    moderation: s.moderation || null,
     submitted_at: s.submittedAt,
     decided_at: s.decidedAt,
   });
@@ -270,9 +279,33 @@ function supabaseDriver() {
       url: r.url,
       path: r.path || undefined,
       status: r.status,
+      // Rows written before the moderation column existed read as unchecked,
+      // which is exactly what they were.
+      moderation: r.moderation || { checked: false },
       submittedAt: Number(r.submitted_at),
       decidedAt: r.decided_at === null ? null : Number(r.decided_at),
     };
+
+  /* The moderation column arrived after the first deploys. Rather than make an
+     upload fail until someone runs the ALTER, drop the field and retry once —
+     the wall keeps working, and the log says what to run. */
+  let hasModerationColumn = true;
+  async function insertRow(row) {
+    if (hasModerationColumn) {
+      const { error } = await db.from(TABLE).insert(row);
+      if (!error) return;
+      if (!/moderation/i.test(error.message) || !/column|schema cache/i.test(error.message)) {
+        throw new Error(`Supabase: ${error.message}`);
+      }
+      hasModerationColumn = false;
+      console.warn(
+        '[store] submissions.moderation column is missing — storing without it. ' +
+        "Run: alter table submissions add column moderation jsonb;"
+      );
+    }
+    const { moderation, ...rest } = row;
+    check(await db.from(TABLE).insert(rest));
+  }
 
   return {
     name: 'supabase',
@@ -286,8 +319,8 @@ function supabaseDriver() {
       check(await db.from('settings').upsert({ id: WALL_ID, value: wall }));
       return wall;
     },
-    async add(name, message, file) {
-      const submission = newSubmission(name, message);
+    async add(name, message, file, moderation) {
+      const submission = newSubmission(name, message, moderation);
       submission.path = `${submission.id}${extensionFor(file)}`;
 
       check(
@@ -298,7 +331,7 @@ function supabaseDriver() {
       );
       submission.url = db.storage.from(BUCKET).getPublicUrl(submission.path).data.publicUrl;
 
-      check(await db.from(TABLE).insert(toRow(submission)));
+      await insertRow(toRow(submission));
       return submission;
     },
     async list() {
@@ -449,8 +482,8 @@ function vercelDriver() {
       }
       return wall;
     },
-    async add(name, message, file) {
-      const submission = newSubmission(name, message);
+    async add(name, message, file, moderation) {
+      const submission = newSubmission(name, message, moderation);
       submission.path = `selfies/${submission.id}${extensionFor(file)}`;
       const blob = await putBlob(submission.path, file.buffer, {
         contentType: file.mimetype,

@@ -4,7 +4,7 @@
   "description": "POC for The Brew House Selfie Wall — cafe display screen, phone upload page, and moderation dashboard.",
   "main": "index.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node --env-file-if-exists=.env server.js",
     "serve": "firebase emulators:start",
     "deploy:firebase": "firebase deploy"
   },

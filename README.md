@@ -28,6 +28,52 @@ PUBLIC_URL=http://192.168.1.20:3000 npm start
 
 That URL is what gets encoded into the QR code and printed at startup.
 
+## Automatic moderation
+
+A selfie wall in a public room is a screen strangers can write on. Every upload
+carries three things a customer will read off it — a name, a message and a photo
+— and all three go through OpenAI's moderation endpoint before anything is
+stored.
+
+Put a key in `.env` (copy `.env.example`) and it turns itself on:
+
+```dotenv
+OPENAI_MODERATION_APIKEY=sk-...
+```
+
+`npm start` reads `.env`; on a host, set the same variable in the project's
+environment instead. Leave it unset and the filter is simply off — which is what
+keeps the POC runnable with no OpenAI account.
+
+**Flagged uploads are refused at the door.** The check runs *before* `store.add`,
+while the photo is still a buffer in memory, so a flagged image is never written
+anywhere. The phone gets a 422 and a plain message naming the field to fix; the
+moderation page never sees it. Storing it and flagging it for a human would mean
+the thing you did not want on a screen is now in your database and rendered as a
+thumbnail on the admin page.
+
+**A broken filter opens, it does not close.** A missing key, a timeout or an
+OpenAI outage lets the upload through as normal `pending`, recorded as
+unchecked — a moderator is still the gate, so an outage degrades the wall rather
+than shutting it. Those submissions get an *arrived unscreened* badge on the
+admin page, and the banner at the top of that page says whether the filter is
+running at all. Failing closed would mean one OpenAI incident takes the whole
+wall down.
+
+Name and message are checked in one call, the photo (inlined as a data URL) in
+another, in parallel. Tuning, all optional:
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `OPENAI_MODERATION_MODEL` | `omni-moderation-latest` | Must be vision-capable; the older `text-moderation-*` models cannot see photos |
+| `MODERATION_TIMEOUT_MS` | `8000` | How long to wait before letting the upload through unchecked |
+| `MODERATION_THRESHOLD` | unset | `0`-`1`. Unset means the API's own verdict decides. Setting it also blocks any category scoring above it — lower is stricter, and produces more false rejections |
+| `MODERATION_MAX_IMAGE_BYTES` | `6291456` | Photos above this skip the image check rather than stall the upload. The phone already downscales to ~550 KB |
+
+The key is server-side only and belongs in `.env` (gitignored) or the host's
+environment — never in the repo. If one leaks, rotate it at
+[platform.openai.com/api-keys](https://platform.openai.com/api-keys).
+
 ## Deploying
 
 The POC's original storage model — files on disk, queue in a local array — does
@@ -50,7 +96,12 @@ the local driver stays the default, so `npm start` still needs no cloud account.
 `GET /api/health` reports which driver is live:
 
 ```json
-{ "ok": true, "storage": "firebase (Cloud Storage + Firestore)", "cloud": true }
+{
+  "ok": true,
+  "storage": "firebase (Cloud Storage + Firestore)",
+  "cloud": true,
+  "moderation": { "enabled": true, "detail": "omni-moderation-latest" }
+}
 ```
 
 ### Supabase (recommended when hosted)
@@ -159,8 +210,13 @@ no configuration.
 
 - **Storage is deliberately throwaway locally.** Submissions live in an in-memory
   array and images land in `uploads/`, so restarting the server empties the wall.
-  There is no auth and no automated moderation. See *Deploying* above for the
-  hosted drivers that replace this.
+  There is no auth. See *Deploying* above for the hosted drivers that replace
+  this.
+- **The automatic filter runs before anything is stored.** Name, message and
+  photo go to OpenAI's moderation endpoint while the image is still a buffer in
+  memory; a flagged upload is refused and never written. It fails open, so an
+  outage leaves a human moderator as the gate rather than closing the wall. See
+  *Automatic moderation* above.
 - **Everything is polling, every 5-6 seconds.** The screen polls `/api/queue`, the
   admin page polls `/api/submissions`, and the phone polls `/api/status/:id` after
   submitting. No WebSockets to keep the moving parts down.
@@ -230,7 +286,7 @@ no configuration.
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| POST | `/api/upload` | Multipart (`name`, `message`, `photo`) → saves the image, queues it as `pending` |
+| POST | `/api/upload` | Multipart (`name`, `message`, `photo`) → moderates, then saves the image and queues it as `pending`. `422` with `{ "moderation": "blocked", "field": … }` if the filter rejects it |
 | GET | `/api/submissions` | Every submission, newest first (admin) |
 | GET | `/api/queue` | Approved submissions in approval order (display screen) |
 | GET | `/api/status/:id` | One submission's status and queue position (phone) |
@@ -240,7 +296,7 @@ no configuration.
 | DELETE | `/api/submissions` | Deletes every submission and its stored image |
 | GET | `/api/wall` | Current wall mode (`loop` or `live`) |
 | POST | `/api/wall` | Switch wall mode: `{ "mode": "loop" \| "live" }` |
-| GET | `/api/health` | Which storage driver is active |
+| GET | `/api/health` | Which storage driver is active, and whether the moderation filter is on |
 | GET | `/api/photo/:id` | Streams a photo from a private Blob store (unused on public stores) |
 
 Uploads are capped at 12 MB and must be images. The upload is held in memory and
@@ -252,6 +308,7 @@ never leaves anything behind.
 ```
 server.js          Express app and routes (exports the app; listens only via npm start)
 store.js           storage drivers: local disk, Supabase, Firebase, or Vercel Blob
+moderate.js        OpenAI moderation for the name, message and photo
 supabase.sql       Supabase schema — run once in the SQL Editor
 index.js           Firebase Cloud Functions entry point
 firebase.json      Firebase Hosting rewrites + functions config

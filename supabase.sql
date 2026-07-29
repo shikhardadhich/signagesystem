@@ -9,9 +9,16 @@ create table if not exists submissions (
   path         text,
   status       text not null default 'pending'
                  check (status in ('pending', 'approved', 'rejected')),
+  -- What the automatic filter managed to check, e.g. {"checked": true}.
+  -- Flagged uploads are refused before they reach this table, so this only
+  -- ever says whether the check ran — null on rows that predate it.
+  moderation   jsonb,
   submitted_at bigint not null,
   decided_at   bigint
 );
+
+-- Existing projects: adds the column above without touching anything else.
+alter table submissions add column if not exists moderation jsonb;
 
 -- The wall reads approved photos in approval order on every poll.
 create index if not exists submissions_status_decided_idx
