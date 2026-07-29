@@ -1,0 +1,843 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SignageSystem — Turn every screen into a brand experience</title>
+<meta name="description" content="Smart digital signage software. Display dynamic content, engage audiences in real time, and turn every screen into a brand experience.">
+<base href="/">
+<link rel="stylesheet" href="/theme.css">
+<style>
+/**
+ * Marketing landing page. Static and self-contained: no API calls, no session,
+ * nothing to break if the app behind it is down. The one live link is the cafe
+ * demo, which points at the real running screen.
+ *
+ * The hero's signage display is built from HTML rather than baked into the
+ * photograph. It costs nothing, the text stays sharp at any size, and it is
+ * the actual product rather than a picture of it — swap in a photo later by
+ * setting --hero-photo on .hero__stage.
+ */
+
+:root {
+  --ink-black: #0e0b08;
+  --panel: #17120d;
+  --gold: #c9973f;
+  --gold-light: #e6c179;
+  --cream: #f7efe1;
+  --paper: #faf6ee;
+  --body: #6b6259;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--sans);
+  color: var(--ink-black);
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+}
+
+img { max-width: 100%; display: block; }
+
+.shell {
+  width: min(1180px, 100% - 3rem);
+  margin: 0 auto;
+}
+
+/* ============================================================== header == */
+
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(14, 11, 8, 0.86);
+  backdrop-filter: blur(10px);
+}
+
+.nav__inner {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  padding: 1rem 0;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: #fff;
+  text-decoration: none;
+  font-size: 1.3rem;
+  letter-spacing: -0.02em;
+  flex: none;
+}
+
+.logo b { font-weight: 700; }
+.logo span { font-weight: 300; }
+
+.nav__links {
+  display: flex;
+  gap: 2rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.nav__links a {
+  color: rgba(247, 239, 225, 0.82);
+  text-decoration: none;
+  font-size: 0.92rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid transparent;
+  transition: color var(--fast) var(--ease), border-color var(--fast) var(--ease);
+}
+
+.nav__links a:hover { color: #fff; border-bottom-color: var(--gold); }
+
+.cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: linear-gradient(180deg, #cfa04c 0%, #b9862f 100%);
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.95rem;
+  padding: 0.8rem 1.5rem;
+  border-radius: 6px;
+  border: 0;
+  text-decoration: none;
+  cursor: pointer;
+  flex: none;
+  transition: transform var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+}
+
+.cta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 22px rgba(201, 151, 63, 0.35);
+}
+
+.nav__burger {
+  display: none;
+  margin-left: auto;
+  background: none;
+  border: 1px solid rgba(247, 239, 225, 0.3);
+  border-radius: 6px;
+  color: var(--cream);
+  font-size: 1.1rem;
+  padding: 0.4rem 0.7rem;
+  cursor: pointer;
+}
+
+/* ================================================================ hero == */
+
+.hero {
+  background: var(--ink-black);
+  color: var(--cream);
+  position: relative;
+  overflow: hidden;
+}
+
+.hero__inner {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  gap: 3rem;
+  align-items: center;
+  padding: 4.5rem 0 0;
+}
+
+.hero__copy { padding-bottom: 4.5rem; }
+
+.hero h1 {
+  font-size: clamp(2.6rem, 5.2vw, 4rem);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  font-weight: 700;
+  margin: 0 0 1.5rem;
+}
+
+.hero h1 em {
+  display: block;
+  color: var(--gold);
+  font-style: normal;
+}
+
+.hero__lede {
+  font-size: 1.02rem;
+  line-height: 1.7;
+  color: rgba(247, 239, 225, 0.72);
+  max-width: 46ch;
+  margin: 0 0 2.5rem;
+}
+
+/* ---- the four proof points ---- */
+
+.points {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  margin: 0 0 2.5rem;
+  padding: 0;
+  list-style: none;
+}
+
+.points li {
+  padding: 0 1.4rem;
+  border-left: 1px solid rgba(247, 239, 225, 0.14);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: rgba(247, 239, 225, 0.8);
+  max-width: 9rem;
+}
+
+.points li:first-child { padding-left: 0; border-left: 0; }
+.points svg { margin-bottom: 0.7rem; }
+
+/* ---- the mocked-up signage display ---- */
+
+.hero__stage {
+  position: relative;
+  min-height: 34rem;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  /* A photograph, when there is one, sits behind the screen. */
+  background-image: var(--hero-photo, none);
+  background-size: cover;
+  background-position: center;
+}
+
+/* Stands in for the cafe until a photograph is dropped in: warm pools of
+   light against the dark, which is what the room reads as at this size. */
+.hero__stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(38rem 26rem at 78% 22%, rgba(230, 193, 121, 0.22), transparent 62%),
+    radial-gradient(30rem 22rem at 18% 78%, rgba(201, 151, 63, 0.13), transparent 60%),
+    linear-gradient(115deg, #0e0b08 0%, #241a11 42%, #3a2717 70%, #17100a 100%);
+}
+
+/* Feathers the artwork into the headline side so no hard seam runs down the
+   middle of the hero at any width. */
+.hero__stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, var(--ink-black) 0%, rgba(14, 11, 8, 0.55) 22%, transparent 55%);
+}
+
+.frame {
+  position: relative;
+  z-index: 2;
+  width: min(340px, 74%);
+  aspect-ratio: 9 / 16;
+  background: #120c07;
+  border: 10px solid #0a0705;
+  border-radius: 10px;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(230, 193, 121, 0.18);
+  display: flex;
+  flex-direction: column;
+  padding: 1.4rem 1.1rem 0.9rem;
+  text-align: center;
+  overflow: hidden;
+}
+
+.frame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.07), transparent 42%);
+  pointer-events: none;
+}
+
+.frame__cup { color: var(--gold); margin: 0 auto 0.4rem; }
+
+.frame__brand {
+  font-family: var(--serif);
+  font-size: 0.82rem;
+  letter-spacing: 0.2em;
+  color: var(--cream);
+  margin: 0;
+}
+
+.frame__rule {
+  font-size: 0.5rem;
+  letter-spacing: 0.32em;
+  color: var(--gold);
+  margin: 0.25rem 0 1.1rem;
+}
+
+.frame__title {
+  font-family: var(--serif);
+  font-size: 1.65rem;
+  line-height: 1.15;
+  color: #fff;
+  margin: 0;
+}
+
+.frame__title i {
+  display: block;
+  color: var(--gold-light);
+  font-family: var(--serif);
+}
+
+.frame__heart { color: var(--gold); font-size: 0.75rem; margin: 0.45rem 0 0.7rem; }
+
+.frame__shot {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+}
+
+.frame__shot img {
+  max-height: 100%;
+  width: auto;
+  filter: drop-shadow(0 14px 26px rgba(0, 0, 0, 0.55));
+}
+
+.frame__foot {
+  font-size: 0.6rem;
+  line-height: 1.6;
+  color: rgba(247, 239, 225, 0.72);
+  margin: 0.6rem 0 0.55rem;
+}
+
+.frame__foot b { color: var(--gold-light); font-weight: 600; }
+
+.frame__strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 3px;
+}
+
+.frame__strip div {
+  aspect-ratio: 3 / 4;
+  border-radius: 2px;
+  background: linear-gradient(150deg, #6b4b2c, #2a1a10);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Suggestion of a face rather than a fake one — a head-and-shoulders
+   silhouette, which is all that reads at 30px wide anyway. */
+.frame__strip div::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -32%;
+  width: 78%;
+  aspect-ratio: 1;
+  transform: translateX(-50%);
+  border-radius: 50% 50% 0 0;
+  background: rgba(247, 239, 225, 0.34);
+}
+
+.frame__strip div::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 16%;
+  width: 34%;
+  aspect-ratio: 1;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: rgba(247, 239, 225, 0.42);
+}
+
+/* ============================================================== demos == */
+
+.section { padding: 4.5rem 0; }
+
+.eyebrow {
+  text-align: center;
+  color: var(--gold);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  margin: 0 0 1rem;
+}
+
+.section h2 {
+  text-align: center;
+  font-size: clamp(1.7rem, 3.4vw, 2.3rem);
+  letter-spacing: -0.02em;
+  margin: 0 0 0.9rem;
+}
+
+.section__sub {
+  text-align: center;
+  color: var(--body);
+  max-width: 52ch;
+  margin: 0 auto 3rem;
+  line-height: 1.65;
+  font-size: 0.98rem;
+}
+
+.demos {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+}
+
+.demo {
+  position: relative;
+  display: block;
+  min-height: 20rem;
+  border-radius: 10px;
+  overflow: hidden;
+  padding: 2.2rem 1.6rem 3.6rem;
+  text-decoration: none;
+  color: var(--cream);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background-image: var(--photo, none);
+  background-size: cover;
+  background-position: center;
+  background-color: #241a11;
+  isolation: isolate;
+}
+
+.demo::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(180deg, rgba(20, 14, 9, 0.55) 0%, rgba(14, 11, 8, 0.88) 100%);
+}
+
+.demo--live {
+  border: 2px solid var(--gold);
+  box-shadow: 0 14px 34px rgba(201, 151, 63, 0.22);
+  transition: transform var(--slow) var(--ease), box-shadow var(--slow) var(--ease);
+}
+
+.demo--live:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 44px rgba(201, 151, 63, 0.34);
+}
+
+/* Locked cards are desaturated and dimmed so the live one is unmistakably
+   the thing to click. */
+.demo--soon {
+  filter: saturate(0.35);
+  cursor: default;
+}
+
+.demo--soon::before { background: rgba(14, 11, 8, 0.72); }
+
+.demo__flag {
+  position: absolute;
+  top: 1rem;
+  left: 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--gold-light);
+}
+
+.demo__flag i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--gold);
+  animation: pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% { opacity: 0.35; transform: scale(0.8); }
+}
+
+.demo__badge {
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(230, 193, 121, 0.65);
+  display: grid;
+  place-items: center;
+  color: var(--gold-light);
+  margin-bottom: 1.4rem;
+}
+
+.demo h3 {
+  font-size: 1.05rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin: 0 0 0.9rem;
+  font-weight: 600;
+}
+
+.demo p {
+  font-size: 0.86rem;
+  line-height: 1.6;
+  color: rgba(247, 239, 225, 0.78);
+  margin: 0;
+  max-width: 26ch;
+}
+
+.demo__go {
+  position: absolute;
+  bottom: 1.1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--gold);
+  color: #fff;
+  display: grid;
+  place-items: center;
+}
+
+.demo__soon {
+  position: absolute;
+  bottom: 1.1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(247, 239, 225, 0.16);
+  color: rgba(247, 239, 225, 0.9);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  padding: 0.4rem 1rem;
+  border-radius: 999px;
+}
+
+/* =========================================================== features == */
+
+.why {
+  background: var(--panel);
+  color: var(--cream);
+}
+
+.why h2 { color: #fff; }
+.why .section__sub { color: rgba(247, 239, 225, 0.6); }
+
+.feats {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.feat {
+  text-align: center;
+  padding: 0 1.2rem;
+  border-left: 1px solid rgba(247, 239, 225, 0.1);
+}
+
+.feat:first-child { border-left: 0; }
+
+.feat h3 {
+  font-size: 0.92rem;
+  margin: 1.1rem 0 0.5rem;
+  color: #fff;
+}
+
+.feat p {
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: rgba(247, 239, 225, 0.6);
+  margin: 0;
+}
+
+/* ============================================================== footer == */
+
+.foot {
+  background: var(--paper);
+  border-top: 1px solid #e8dfd0;
+}
+
+.foot__inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1.6rem 0;
+}
+
+.foot .logo { color: var(--ink-black); font-size: 1.15rem; }
+
+.foot__rule {
+  width: 1px;
+  height: 2rem;
+  background: #ddd2bf;
+}
+
+.foot__line {
+  color: var(--body);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.foot__tag {
+  margin-left: auto;
+  color: var(--gold);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+/* ========================================================== responsive == */
+
+@media (max-width: 980px) {
+  .nav__links { display: none; }
+  .nav__burger { display: block; }
+  .nav__inner .cta { margin-left: 1rem; }
+
+  .hero__inner { grid-template-columns: 1fr; gap: 0; padding-top: 3rem; }
+  .hero__copy { padding-bottom: 2.5rem; }
+  .hero__stage { min-height: 28rem; padding-bottom: 2.5rem; }
+  .hero__stage::after { background: linear-gradient(180deg, var(--ink-black), transparent 30%); }
+
+  .demos { grid-template-columns: 1fr; }
+  .feats { grid-template-columns: repeat(2, 1fr); gap: 2rem 0; }
+  .feat { border-left: 0; }
+}
+
+@media (max-width: 560px) {
+  .shell { width: calc(100% - 2rem); }
+  .points li { max-width: 7.5rem; padding: 0 0.9rem; }
+  .feats { grid-template-columns: 1fr; }
+  .foot__tag { margin-left: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .demo__flag i { animation: none; }
+  .demo--live:hover { transform: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- ================================================================ nav -->
+<header class="nav">
+  <div class="shell nav__inner">
+    <a class="logo" href="/landing.html">
+      <svg width="30" height="30" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+        <rect x="1.5" y="1.5" width="16" height="16" rx="3" stroke="currentColor" stroke-width="2.4"/>
+        <rect x="14.5" y="14.5" width="16" height="16" rx="3" stroke="currentColor" stroke-width="2.4"/>
+      </svg>
+      <span><b>Signage</b>System</span>
+    </a>
+
+    <nav class="nav__links">
+      <a href="#demos">Solutions</a>
+      <a href="#why">Features</a>
+      <a href="#demos">Industries</a>
+      <a href="#why">Pricing</a>
+      <a href="#why">Resources</a>
+    </nav>
+
+    <button class="nav__burger" type="button" aria-label="Menu">☰</button>
+    <a class="cta" href="#demos">Book a Demo</a>
+  </div>
+</header>
+
+<!-- =============================================================== hero -->
+<section class="hero">
+  <div class="shell hero__inner">
+    <div class="hero__copy">
+      <h1>Engage.<br>Inspire.<em>Leave an Impression.</em></h1>
+
+      <p class="hero__lede">
+        SignageSystem is smart digital signage software that helps businesses display
+        dynamic content, engage audiences in real time, and turn every screen into a
+        powerful brand experience.
+      </p>
+
+      <ul class="points">
+        <li>
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#c9973f" stroke-width="1.8" stroke-linecap="round">
+            <path d="M5 12.5a10 10 0 0 1 14 0"/><path d="M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19.5" r="1.2" fill="#c9973f" stroke="none"/>
+          </svg>
+          Real-time<br>Content
+        </li>
+        <li>
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#c9973f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 11V5.5a1.5 1.5 0 0 1 3 0V11"/><path d="M13 11V9.5a1.5 1.5 0 0 1 3 0V11"/>
+            <path d="M16 11.5v-1a1.5 1.5 0 0 1 3 0V16a5 5 0 0 1-5 5h-1.5a5.5 5.5 0 0 1-4.4-2.2L5 14.5a1.6 1.6 0 0 1 2.5-2L10 15"/>
+          </svg>
+          Interactive<br>Experiences
+        </li>
+        <li>
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#c9973f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M7 18a4 4 0 0 1 .6-8 5.5 5.5 0 0 1 10.5 1.5A3.5 3.5 0 0 1 17.5 18z"/>
+          </svg>
+          Cloud<br>Managed
+        </li>
+        <li>
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#c9973f" stroke-width="1.8" stroke-linecap="round">
+            <path d="M5 19v-5"/><path d="M12 19V9"/><path d="M19 19V5"/>
+          </svg>
+          Scalable for<br>Any Business
+        </li>
+      </ul>
+
+      <a class="cta" href="#demos">
+        Explore Demos
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 12h13"/><path d="m12 6 6 6-6 6"/>
+        </svg>
+      </a>
+    </div>
+
+    <!-- The display is real markup, not a picture of one: it stays sharp at
+         any size and it is the product rather than a mock-up of it. -->
+    <div class="hero__stage">
+      <div class="frame" role="img" aria-label="A digital signage screen in a cafe showing The Brew House menu board">
+        <svg class="frame__cup" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/>
+          <path d="M16 10.5h1.5a2.5 2.5 0 0 1 0 5H16"/>
+          <path d="M8 3.5c-.6 1 .6 1.6 0 2.6M11.5 3.5c-.6 1 .6 1.6 0 2.6"/>
+        </svg>
+        <p class="frame__brand">THE BREW HOUSE</p>
+        <p class="frame__rule">— COFFEE &amp; MORE —</p>
+
+        <h2 class="frame__title">Brewed<i>for Moments</i></h2>
+        <p class="frame__heart">♥</p>
+
+        <div class="frame__shot">
+          <img src="/assets/menu/cappuccino.png" alt=""
+               onerror="this.src='/assets/emblem.png'">
+        </div>
+
+        <p class="frame__foot">Share your moment<br><b>#BrewHouseMoments</b></p>
+        <div class="frame__strip"><div></div><div></div><div></div><div></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================== demos -->
+<section class="section" id="demos">
+  <div class="shell">
+    <p class="eyebrow">Live Demos</p>
+    <h2>Experience It Live</h2>
+    <p class="section__sub">
+      See how SignageSystem transforms screens into engaging experiences across
+      different industries.
+    </p>
+
+    <div class="demos">
+      <!-- The only one that goes anywhere: it opens the running cafe screen. -->
+      <a class="demo demo--live" href="/brew-house" target="_blank" rel="noopener">
+        <span class="demo__flag"><i></i>ACTIVE</span>
+        <span class="demo__badge">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+            <path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z"/>
+            <path d="M16 10.5h1.5a2.5 2.5 0 0 1 0 5H16"/>
+            <path d="M8 3.5c-.6 1 .6 1.6 0 2.6M11.5 3.5c-.6 1 .6 1.6 0 2.6"/>
+          </svg>
+        </span>
+        <h3>Cafe Demo</h3>
+        <p>Experience a cozy café environment with engaging customer moments, menu highlights &amp; more.</p>
+        <span class="demo__go">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 12h13"/><path d="m12 6 6 6-6 6"/>
+          </svg>
+        </span>
+      </a>
+
+      <div class="demo demo--soon" aria-disabled="true">
+        <span class="demo__badge">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+            <rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/>
+          </svg>
+        </span>
+        <h3>Shopping Mall Demo</h3>
+        <p>Showcase promotions, events &amp; real-time updates that captivate every shopper.</p>
+        <span class="demo__soon">COMING SOON</span>
+      </div>
+
+      <div class="demo demo--soon" aria-disabled="true">
+        <span class="demo__badge">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+            <rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/>
+          </svg>
+        </span>
+        <h3>Jewelry Shop Demo</h3>
+        <p>Display elegance &amp; luxury with stunning visuals that build trust and drive conversions.</p>
+        <span class="demo__soon">COMING SOON</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ why us -->
+<section class="section why" id="why">
+  <div class="shell">
+    <p class="eyebrow">Why businesses choose us</p>
+    <h2>Smarter Screens. Stronger Connections.</h2>
+    <p class="section__sub">Everything you need to manage, display and engage — effortlessly.</p>
+
+    <div class="feats">
+      <div class="feat">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#c9973f" stroke-width="1.6">
+          <rect x="3" y="4" width="8" height="7" rx="1.2"/><rect x="13" y="4" width="8" height="4" rx="1.2"/>
+          <rect x="13" y="10" width="8" height="10" rx="1.2"/><rect x="3" y="13" width="8" height="7" rx="1.2"/>
+        </svg>
+        <h3>Centralized Control</h3>
+        <p>Manage all your screens from one powerful dashboard.</p>
+      </div>
+
+      <div class="feat">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#c9973f" stroke-width="1.6" stroke-linejoin="round">
+          <path d="M4 20V4h10"/><path d="m14 17 6-6-3-3-6 6-1 4z"/>
+        </svg>
+        <h3>Dynamic Content</h3>
+        <p>Display images, videos, menus, feeds &amp; more.</p>
+      </div>
+
+      <div class="feat">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#c9973f" stroke-width="1.6" stroke-linecap="round">
+          <circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/>
+          <path d="M16 5.4a3.2 3.2 0 0 1 0 5.2"/><path d="M17.5 14.2A5.5 5.5 0 0 1 20.5 19"/>
+        </svg>
+        <h3>Audience Engagement</h3>
+        <p>Turn viewers into participants with interactive experiences.</p>
+      </div>
+
+      <div class="feat">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#c9973f" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 20V6"/><path d="M4 20h16"/><path d="m7 15 4-4 3 3 6-6"/><path d="M16 8h4v4"/>
+        </svg>
+        <h3>Real-time Analytics</h3>
+        <p>Track performance and optimize content instantly.</p>
+      </div>
+
+      <div class="feat">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#c9973f" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3 5 6v5.5c0 4.3 3 8.2 7 9.5 4-1.3 7-5.2 7-9.5V6z"/><path d="m9.5 12 1.8 1.8 3.4-3.6"/>
+        </svg>
+        <h3>Reliable &amp; Secure</h3>
+        <p>Enterprise-grade security with 99.9% uptime.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================= footer -->
+<footer class="foot">
+  <div class="shell foot__inner">
+    <span class="logo">
+      <svg width="26" height="26" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+        <rect x="1.5" y="1.5" width="16" height="16" rx="3" stroke="currentColor" stroke-width="2.4"/>
+        <rect x="14.5" y="14.5" width="16" height="16" rx="3" stroke="currentColor" stroke-width="2.4"/>
+      </svg>
+      <span><b>Signage</b>System</span>
+    </span>
+    <span class="foot__rule"></span>
+    <p class="foot__line">Transform every screen into an engagement opportunity.</p>
+    <p class="foot__tag">Your brand. Your story. Their experience.</p>
+  </div>
+</footer>
+
+</body>
+</html>
