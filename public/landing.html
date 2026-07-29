@@ -435,14 +435,25 @@ img { max-width: 100%; display: block; }
   box-shadow: 0 20px 44px rgba(201, 151, 63, 0.34);
 }
 
-/* Locked cards are desaturated and dimmed so the live one is unmistakably
-   the thing to click. */
-.demo--soon {
-  filter: saturate(0.35);
-  cursor: default;
+/* Gated cards are dimmed so the open demo is unmistakably the one to try
+   first, but they are still links: the pill says what to do, so it has to be
+   possible to do it. */
+.demo--locked {
+  filter: saturate(0.4);
+  transition: filter var(--slow) var(--ease), transform var(--slow) var(--ease);
 }
 
-.demo--soon::before { background: rgba(14, 11, 8, 0.72); }
+.demo--locked::before { background: rgba(14, 11, 8, 0.72); }
+
+.demo--locked:hover {
+  filter: saturate(0.85);
+  transform: translateY(-3px);
+}
+
+.demo--locked:hover .demo__soon {
+  background: var(--gold);
+  color: #fff;
+}
 
 .demo__flag {
   position: absolute;
@@ -511,6 +522,7 @@ img { max-width: 100%; display: block; }
 }
 
 .demo__soon {
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
   position: absolute;
   bottom: 1.1rem;
   left: 50%;
@@ -623,7 +635,8 @@ img { max-width: 100%; display: block; }
 
 @media (prefers-reduced-motion: reduce) {
   .demo__flag i { animation: none; }
-  .demo--live:hover { transform: none; }
+  .demo--live:hover,
+  .demo--locked:hover { transform: none; }
 }
 </style>
 </head>
@@ -759,7 +772,7 @@ img { max-width: 100%; display: block; }
         </span>
       </a>
 
-      <div class="demo demo--soon" aria-disabled="true">
+      <a class="demo demo--locked" href="/login">
         <span class="demo__badge">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
             <rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/>
@@ -767,10 +780,10 @@ img { max-width: 100%; display: block; }
         </span>
         <h3>Shopping Mall Demo</h3>
         <p>Showcase promotions, events &amp; real-time updates that captivate every shopper.</p>
-        <span class="demo__soon">COMING SOON</span>
-      </div>
+        <span class="demo__soon">NEED LOGIN</span>
+      </a>
 
-      <div class="demo demo--soon" aria-disabled="true">
+      <a class="demo demo--locked" href="/login">
         <span class="demo__badge">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
             <rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/>
@@ -778,8 +791,8 @@ img { max-width: 100%; display: block; }
         </span>
         <h3>Jewelry Shop Demo</h3>
         <p>Display elegance &amp; luxury with stunning visuals that build trust and drive conversions.</p>
-        <span class="demo__soon">COMING SOON</span>
-      </div>
+        <span class="demo__soon">NEED LOGIN</span>
+      </a>
     </div>
   </div>
 </section>
