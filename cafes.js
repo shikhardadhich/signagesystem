@@ -44,6 +44,7 @@ const ID_RE = /^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$/;
    producing a cafe that can never be reached. */
 const RESERVED = new Set([
   'admin', 'api', 'assets', 'uploads', 'login', 'logout', 'screen', 'upload',
+  'jewel',
   'favicon.ico', 'theme.css', 'menu.json', 'robots.txt', 'health', 'static',
 ]);
 

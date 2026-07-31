@@ -23,6 +23,8 @@ npm start
 | Cafes and accounts | `/admin/cafes` | Owner | Yes |
 | Moderation | `/admin/<cafe>` | Staff | Yes |
 | Menu board editor | `/admin/<cafe>/board` | Staff | Yes |
+| Jewellery screen | `/jewel` | A jeweller's counter TV | No |
+| Jewellery editor | `/admin/jewel` | Staff laptop | Yes |
 
 The bare domain is the marketing page, signed in or not: whoever lands there is
 far likelier to be a visitor than a barista, and staff with a session are one
@@ -118,6 +120,43 @@ watching; refusing the save would be the worse outcome.
 `public/menu.json` stays in the repo as the shipped default. A cafe nobody has
 edited renders it, so a brand new cafe shows a complete board instead of a blank
 screen, and *Reset to defaults* in the editor drops back to it.
+
+## The jewellery screen
+
+A second kind of display, for a jeweller's counter, linked from the demos on
+the landing page. Four things, in the order somebody walking past reads them:
+
+| | |
+| --- | --- |
+| Screen | `/jewel` — public, like the cafe screen and for the same reason |
+| Editor | `/admin/jewel` — any signed-in staff member |
+
+**Rates are typed in, not fetched.** An Indian jeweller's counter rate is their
+own number — set from their supplier and their making charges — so a spot price
+off a metals API would be wrong on the wall by the time anyone looked at it.
+Staff enter today's figure and nothing else: the first save on a new day files
+whatever was showing as yesterday's, and that is what the screen's "▲ +₹120 vs
+yesterday" compares against. Later saves the same day are treated as
+corrections and leave the comparison alone, so fixing a mistyped digit doesn't
+look like the price moved twice. An empty box drops that line from the screen
+rather than showing ₹0.
+
+**Weather is live and needs no key.** [Open-Meteo](https://open-meteo.com) is
+free and keyless, which is the whole reason it is here — a demo nobody can run
+without first signing up for a weather API is a demo that doesn't get run. Name
+a city in the editor and the server resolves it, caches the result and refreshes
+every fifteen minutes. A failure returns nothing rather than an error: the panel
+steps aside and the rates stay up, which is the right trade when the weather is
+the least important thing on the wall.
+
+**Featured pieces** are two to four uploaded photographs that cross-fade with a
+slow drift, each with its own caption or the panel's standing line. They go
+through the same storage as everything else, so the same object store serves
+them. With no pieces added, the rates take the whole screen.
+
+Nothing here is per-cafe: there is one jewellery screen, because it exists to be
+shown from the landing page. It keeps its config in the `settings` table
+alongside the wall modes, so an existing database needs no migration.
 
 ## Automatic moderation
 
@@ -434,6 +473,7 @@ never leaves anything behind.
 server.js          Express app and routes (exports the app; listens only via npm start)
 store.js           selfie storage drivers: local disk, Supabase, Firebase, or Vercel Blob
 cafes.js           cafes and their menu boards
+jewel.js           the jewellery screen: rates, weather, featured pieces
 assets.js          board image storage: Supabase, Vercel Blob, or local disk
 auth.js            staff accounts and role checks, on Supabase Auth
 moderate.js        OpenAI moderation for the name, message and photo
@@ -452,6 +492,8 @@ public/landing.html  the marketing page served at /
 public/login.html  staff sign-in
 public/cafes.html  owner console: cafes and accounts
 public/board.html  menu board editor
+public/jewel.html  jewellery display screen
+public/jewel-admin.html  jewellery screen editor
 public/screen.html display screen
 public/upload.html phone upload page
 public/admin.html  moderation dashboard

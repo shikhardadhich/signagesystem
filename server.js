@@ -25,6 +25,7 @@ const QRCode = require('qrcode');
 
 const store = require('./store');
 const cafes = require('./cafes');
+const jewel = require('./jewel');
 const auth = require('./auth');
 const moderation = require('./moderate');
 
@@ -399,6 +400,82 @@ app.post(
   }
 );
 
+/* --------------------------------------------------------------- jewel -- */
+
+/* A second kind of screen, for a jewellery counter: today's gold and silver
+   rates, the shop's branding, the local weather, and a rotating window of
+   featured pieces. One shop for now — it exists to be shown from the landing
+   page — so these routes carry no id, unlike the cafe's. */
+
+app.get('/api/jewel', async (req, res, next) => {
+  try {
+    res.json(await jewel.get());
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* Weather is fetched here rather than in the browser: the screen is a kiosk
+   that may sit behind a filtered network, and one server-side call every
+   fifteen minutes serves every screen in the shop. A failure is a 200 with a
+   null body — the panel disappears and the rates stay up, which is the right
+   trade when the weather is the least important thing on the wall. */
+app.get('/api/jewel/weather', async (req, res) => {
+  try {
+    res.json(await jewel.weather());
+  } catch (err) {
+    res.json(null);
+  }
+});
+
+/* The code the strip along the bottom carries. Rendered here rather than in
+   the browser so the screen needs no QR library of its own, and returned as a
+   data URL so it survives a kiosk with no outbound access. */
+app.get('/api/jewel/qr', async (req, res, next) => {
+  try {
+    const { qr } = await jewel.get();
+    if (!qr.url) return res.json({ dataUrl: null });
+    res.json({
+      dataUrl: await QRCode.toDataURL(qr.url, {
+        margin: 1,
+        width: 480,
+        color: { dark: '#1a1408', light: '#ffffff' },
+      }),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.put('/api/jewel', auth.requireUser, async (req, res, next) => {
+  try {
+    res.json(await jewel.save(req.body));
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post('/api/jewel/reset', auth.requireUser, async (req, res, next) => {
+  try {
+    res.json(await jewel.reset());
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post(
+  '/api/jewel/image',
+  auth.requireUser, boardImage.single('image'),
+  async (req, res, next) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: 'An image is required' });
+      res.status(201).json({ url: await jewel.saveImage(req.file) });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 /* ---------------------------------------------------------------- pages -- */
 
 /* The front door is the marketing page, signed in or not. Someone who arrives
@@ -427,6 +504,10 @@ app.get('/admin/cafes', auth.requirePage, (req, res) => {
   if (req.profile.role !== 'owner') return res.redirect('/admin');
   res.sendFile(path.join(__dirname, 'public', 'cafes.html'));
 });
+
+/* Ahead of /admin/:cafeId, or "jewel" would be read as a cafe id and 404 on a
+   cafe that does not exist. Same reason /jewel sits above /:cafeId below. */
+app.get('/admin/jewel', auth.requirePage, page('jewel-admin.html'));
 
 app.get('/admin/:cafeId', auth.requirePage, guardCafePage, page('admin.html'));
 app.get('/admin/:cafeId/board', auth.requirePage, guardCafePage, page('board.html'));
@@ -461,6 +542,11 @@ for (const [legacy, suffix] of [['/screen', ''], ['/upload', '/upload']]) {
  * An unknown cafe gets the marketing page rather than a bare 404: the usual
  * cause is a typo in a URL somebody read off a sticky note.
  */
+/* The jewellery demo. Public like the cafe screen and for the same reason: a
+   kiosk browser that lost its session overnight must still come up showing the
+   shop, not a login box with nobody there to type into it. */
+app.get('/jewel', page('jewel.html'));
+
 app.get('/:cafeId', publicCafePage('screen.html'));
 app.get('/:cafeId/upload', publicCafePage('upload.html'));
 

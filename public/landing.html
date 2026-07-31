@@ -10,8 +10,8 @@
 <style>
 /**
  * Marketing landing page. Static and self-contained: no API calls, no session,
- * nothing to break if the app behind it is down. The one live link is the cafe
- * demo, which points at the real running screen.
+ * nothing to break if the app behind it is down. The live links are the cafe
+ * and jewellery demos, which point at the real running screens.
  *
  * The hero's signage display is built from HTML rather than baked into the
  * photograph. It costs nothing, the text stays sharp at any size, and it is
@@ -753,7 +753,7 @@ img { max-width: 100%; display: block; }
     </p>
 
     <div class="demos">
-      <!-- The only one that goes anywhere: it opens the running cafe screen. -->
+      <!-- Opens the running cafe screen. -->
       <a class="demo demo--live" href="/brew-house" target="_blank" rel="noopener">
         <span class="demo__flag"><i></i>ACTIVE</span>
         <span class="demo__badge">
@@ -783,15 +783,21 @@ img { max-width: 100%; display: block; }
         <span class="demo__soon">NEED LOGIN</span>
       </a>
 
-      <a class="demo demo--locked" href="/login">
+      <!-- Opens the running jewellery screen: live rates, weather and pieces. -->
+      <a class="demo demo--live" href="/jewel" target="_blank" rel="noopener">
+        <span class="demo__flag"><i></i>ACTIVE</span>
         <span class="demo__badge">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
-            <rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/>
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">
+            <path d="M6 3h12l3 5-9 13L3 8z"/><path d="M3 8h18"/><path d="m9 3-3 5 6 13 6-13-3-5"/>
           </svg>
         </span>
         <h3>Jewelry Shop Demo</h3>
-        <p>Display elegance &amp; luxury with stunning visuals that build trust and drive conversions.</p>
-        <span class="demo__soon">NEED LOGIN</span>
+        <p>Today's gold &amp; silver rates, live weather and a rotating window of featured pieces.</p>
+        <span class="demo__go">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 12h13"/><path d="m12 6 6 6-6 6"/>
+          </svg>
+        </span>
       </a>
     </div>
   </div>

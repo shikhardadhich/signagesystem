@@ -1,0 +1,900 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gold &amp; Silver Rates</title>
+<base href="/">
+<style>
+/**
+ * The jewellery counter screen.
+ *
+ * Four things, in the order someone walking past reads them: whose shop this
+ * is, what gold and silver cost today, what the weather is doing, and what the
+ * shop would like to sell you. The rates are the reason anyone looks up, so
+ * they get the left column at a size readable from across the floor; the
+ * photographs get the rest.
+ *
+ * Its own dark palette rather than theme.css: that file is the cafe's ivory
+ * menu board, and a jeweller's window is black and gold. Sized in vh throughout
+ * for the same reason the cafe screen is — one layout has to hold on whatever
+ * TV it is bolted to, and vh is the only unit that tracks the screen rather
+ * than the browser's idea of a font.
+ */
+
+:root {
+  --ink: #0b0906;
+  --panel: #16110a;
+  --panel-soft: #1d1710;
+  --line: rgba(201, 151, 63, 0.28);
+  --line-soft: rgba(201, 151, 63, 0.14);
+  --gold: #d4a548;
+  --gold-bright: #f0cd83;
+  --gold-deep: #a87d33;
+  --cream: #f3e7d0;
+  --muted: #9c8a6e;
+  --up: #4fae62;
+  --down: #d2604a;
+
+  --serif: "Georgia", "Times New Roman", serif;
+  --sans: "Avenir Next", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --ease: cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--ink);
+  color: var(--cream);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The whole screen is one grid: header, body, trust strip. No page scrolls on
+   a wall-mounted TV, so everything has to fit by construction. */
+.stage {
+  height: 100vh;
+  padding: 2vh 2.2vh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 1.8vh;
+  background:
+    radial-gradient(60vh 40vh at 12% 0%, rgba(201, 151, 63, 0.10), transparent 70%),
+    radial-gradient(70vh 50vh at 88% 100%, rgba(201, 151, 63, 0.08), transparent 70%),
+    var(--ink);
+}
+
+.frame {
+  border: 1px solid var(--line);
+  border-radius: 1.8vh;
+  background: linear-gradient(160deg, var(--panel), var(--panel-soft));
+}
+
+/* ------------------------------------------------------------- header -- */
+
+.head {
+  display: grid;
+  grid-template-columns: auto 1px minmax(0, 1fr) 1px auto;
+  align-items: center;
+  gap: 2.4vh;
+  padding: 1.6vh 2.4vh;
+}
+
+.head__rule {
+  align-self: stretch;
+  background: var(--line);
+  margin: 0.6vh 0;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 1.6vh;
+  min-width: 0;
+}
+
+.brand__mark {
+  width: 8vh;
+  height: 8vh;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 40% 35%, rgba(201, 151, 63, 0.18), transparent 70%);
+  overflow: hidden;
+}
+
+.brand__mark img { max-width: 82%; max-height: 82%; object-fit: contain; }
+
+.brand__mark svg { width: 55%; height: 55%; stroke: var(--gold); fill: none; stroke-width: 1.3; }
+
+.brand__name {
+  font-family: var(--serif);
+  font-size: 4.2vh;
+  line-height: 1.05;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  margin: 0;
+  color: var(--gold-bright);
+}
+
+.brand__tagline {
+  margin: 0.6vh 0 0;
+  font-size: 1.5vh;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.title {
+  min-width: 0;
+}
+
+.title h2 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 3.4vh;
+  line-height: 1.12;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.title h2 em {
+  font-style: normal;
+  color: var(--gold);
+}
+
+.title__date {
+  margin: 0.8vh 0 0;
+  font-size: 1.7vh;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+}
+
+.title__date span { color: var(--line); margin: 0 0.9vh; }
+
+/* ------------------------------------------------------------ weather -- */
+
+.wx {
+  display: flex;
+  align-items: center;
+  gap: 1.8vh;
+  text-align: left;
+}
+
+.wx.hidden { display: none; }
+
+.wx__icon { width: 7vh; height: 7vh; flex: none; }
+
+.wx__now {
+  font-size: 4.6vh;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+}
+
+.wx__now sup { font-size: 1.9vh; vertical-align: super; }
+
+.wx__cond {
+  margin: 0.5vh 0 0;
+  font-size: 1.6vh;
+  color: var(--muted);
+}
+
+.wx__range {
+  display: grid;
+  gap: 0.9vh;
+  padding-left: 1.8vh;
+  border-left: 1px solid var(--line);
+}
+
+.wx__range div {
+  display: flex;
+  align-items: center;
+  gap: 0.8vh;
+  font-size: 2vh;
+  color: var(--cream);
+}
+
+.wx__range svg { width: 1.8vh; height: 1.8vh; stroke: var(--gold); fill: none; stroke-width: 1.6; }
+
+.wx__place {
+  margin: 1vh 0 0;
+  font-size: 1.5vh;
+  color: var(--muted);
+}
+
+/* -------------------------------------------------------------- body -- */
+
+.body {
+  display: grid;
+  grid-template-columns: 34% minmax(0, 1fr);
+  gap: 1.8vh;
+  min-height: 0;
+}
+
+/* A screen with no photographs to show gives the whole width to the rates
+   rather than leaving a black rectangle where the jewellery should be. */
+.body.is-rates-only { grid-template-columns: 1fr; }
+.body.is-rates-only .showcase { display: none; }
+
+.rates {
+  padding: 2vh;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.rates__head {
+  display: flex;
+  align-items: center;
+  gap: 1.2vh;
+  margin-bottom: 1.2vh;
+}
+
+.rates__head svg { width: 3.4vh; height: 3.4vh; flex: none; }
+
+.rates__head h3 {
+  margin: 0;
+  font-size: 2.6vh;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--gold-bright);
+}
+
+.rates__purity {
+  margin-left: auto;
+  font-size: 1.8vh;
+  color: var(--muted);
+}
+
+.rates__group + .rates__group { margin-top: 2vh; }
+
+.rate {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5vh;
+  padding: 1.5vh 1.8vh;
+  border: 1px solid var(--line-soft);
+  background: rgba(0, 0, 0, 0.32);
+}
+
+.rate:first-of-type { border-radius: 1.2vh 1.2vh 0 0; }
+.rate:last-of-type { border-radius: 0 0 1.2vh 1.2vh; border-top: 0; }
+.rate:only-of-type { border-radius: 1.2vh; border-top: 1px solid var(--line-soft); }
+
+.rate__value {
+  font-size: 4.2vh;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.rate__unit {
+  margin: 0.7vh 0 0;
+  font-size: 1.6vh;
+  color: var(--muted);
+}
+
+.rate__delta {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.rate__delta b {
+  font-size: 2.2vh;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6vh;
+}
+
+.rate__delta i {
+  font-style: normal;
+  font-size: 1.5vh;
+  line-height: 1;
+}
+
+.rate__delta small {
+  display: block;
+  margin-top: 0.5vh;
+  font-size: 1.4vh;
+  color: var(--muted);
+}
+
+.is-up b { color: var(--up); }
+.is-down b { color: var(--down); }
+.is-flat b { color: var(--muted); }
+
+.rates__note {
+  margin: auto 0 0;
+  padding-top: 1.6vh;
+  font-size: 1.5vh;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 0.8vh;
+}
+
+.rates__note svg { width: 1.8vh; height: 1.8vh; stroke: var(--gold-deep); fill: none; stroke-width: 1.6; }
+
+/* ---------------------------------------------------------- showcase -- */
+
+.showcase {
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.showcase__label {
+  position: absolute;
+  top: 2vh;
+  left: 2.4vh;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 1vh;
+  font-size: 2.1vh;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gold-bright);
+  text-shadow: 0 0.3vh 1.2vh rgba(0, 0, 0, 0.85);
+}
+
+.showcase__label svg { width: 2.6vh; height: 2.6vh; fill: var(--gold); }
+
+/* Every photo is stacked in the same place and cross-faded, so the panel never
+   goes empty between two pieces the way a swap would. */
+.shot {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 900ms var(--ease), transform 6s linear;
+  transform: scale(1.02);
+}
+
+.shot.is-on {
+  opacity: 1;
+  transform: scale(1.06);
+}
+
+.shot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Bottom third only. A full-height scrim would grey out the piece itself,
+   which is the one thing on this half of the screen worth looking at. */
+.showcase::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 30%;
+  background: linear-gradient(180deg, transparent, rgba(6, 5, 3, 0.85));
+  pointer-events: none;
+  z-index: 1;
+}
+
+.showcase__caption {
+  position: absolute;
+  left: 50%;
+  bottom: 2.4vh;
+  transform: translateX(-50%);
+  z-index: 2;
+  padding: 1vh 2.4vh;
+  border: 1px solid var(--line);
+  border-radius: 0.7vh;
+  background: rgba(12, 9, 5, 0.82);
+  font-size: 1.9vh;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold-bright);
+  white-space: nowrap;
+  max-width: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.showcase__caption:empty { display: none; }
+
+.showcase__empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 2vh;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ------------------------------------------------------------- trust -- */
+
+.trust {
+  display: flex;
+  align-items: center;
+  padding: 1.6vh 2.4vh;
+  gap: 2vh;
+}
+
+.trust__item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 1.4vh;
+  min-width: 0;
+  border-right: 1px solid var(--line-soft);
+  padding-right: 2vh;
+}
+
+.trust__item:last-of-type { border-right: 0; }
+
+.trust__item svg { width: 3.4vh; height: 3.4vh; flex: none; stroke: var(--gold); fill: none; stroke-width: 1.4; }
+
+.trust__item p {
+  margin: 0;
+  font-size: 1.9vh;
+  line-height: 1.3;
+  color: var(--cream);
+}
+
+.trust__item p span { display: block; color: var(--muted); }
+
+.qr {
+  display: flex;
+  align-items: center;
+  gap: 1.4vh;
+  flex: none;
+}
+
+.qr img {
+  width: 8vh;
+  height: 8vh;
+  border-radius: 0.6vh;
+  background: #fff;
+  padding: 0.5vh;
+}
+
+.qr p {
+  margin: 0;
+  font-size: 1.8vh;
+  line-height: 1.3;
+  color: var(--cream);
+  max-width: 18vh;
+}
+
+.qr.hidden { display: none; }
+
+/* ----------------------------------------------------------- offline -- */
+
+.offline {
+  position: fixed;
+  top: 2vh;
+  right: 2vh;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: 0.8vh;
+  padding: 0.8vh 1.6vh;
+  border-radius: 999px;
+  background: rgba(162, 69, 47, 0.92);
+  color: #fff;
+  font-size: 1.5vh;
+}
+
+.offline.hidden { display: none; }
+
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+.offline i {
+  width: 1vh;
+  height: 1vh;
+  border-radius: 50%;
+  background: #fff;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shot, .shot.is-on { transition: opacity 200ms linear; transform: none; }
+  .offline i { animation: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="offline hidden" id="offline"><i></i> Reconnecting…</div>
+
+<div class="stage">
+
+  <!-- ------------------------------------------------------- header -- -->
+  <header class="frame head">
+    <div class="brand">
+      <div class="brand__mark" id="brand-mark">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M6 3h12l3 5-9 13L3 8z"/><path d="M3 8h18"/><path d="m9 3-3 5 6 13 6-13-3-5"/>
+        </svg>
+      </div>
+      <div>
+        <h1 class="brand__name" id="shop-name">Jewellers</h1>
+        <p class="brand__tagline" id="shop-tagline"></p>
+      </div>
+    </div>
+
+    <div class="head__rule"></div>
+
+    <div class="title">
+      <h2>Today's<br><em>Gold &amp; Silver Rates</em></h2>
+      <p class="title__date"><span id="date"></span><span>|</span><span id="weekday"></span></p>
+    </div>
+
+    <div class="head__rule"></div>
+
+    <div class="wx hidden" id="wx">
+      <div id="wx-icon"></div>
+      <div>
+        <div class="wx__now"><span id="wx-temp">--</span><sup>°C</sup></div>
+        <p class="wx__cond" id="wx-cond"></p>
+        <p class="wx__place" id="wx-place"></p>
+      </div>
+      <div class="wx__range">
+        <div>
+          <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V5"/><path d="m6 11 6-6 6 6"/></svg>
+          <span id="wx-high">--°C</span>
+        </div>
+        <div>
+          <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v15"/><path d="m6 13 6 6 6-6"/></svg>
+          <span id="wx-low">--°C</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- --------------------------------------------------------- body -- -->
+  <div class="body" id="body">
+
+    <section class="frame rates">
+      <div class="rates__head">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="2.5" y="13" width="9" height="6" rx="1" fill="#d4a548" opacity="0.75"/>
+          <rect x="12.5" y="13" width="9" height="6" rx="1" fill="#d4a548" opacity="0.75"/>
+          <rect x="7.5" y="6" width="9" height="6" rx="1" fill="#f0cd83"/>
+        </svg>
+        <h3>Gold Rates</h3>
+        <span class="rates__purity" id="gold-purity">(24K)</span>
+      </div>
+      <div class="rates__group" id="gold-rows"></div>
+
+      <div class="rates__head" style="margin-top:2.2vh">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="2.5" y="13" width="9" height="6" rx="1" fill="#c9cbd0" opacity="0.7"/>
+          <rect x="12.5" y="13" width="9" height="6" rx="1" fill="#c9cbd0" opacity="0.7"/>
+          <rect x="7.5" y="6" width="9" height="6" rx="1" fill="#e8eaee"/>
+        </svg>
+        <h3>Silver Rates</h3>
+        <span class="rates__purity" id="silver-purity">(999)</span>
+      </div>
+      <div class="rates__group" id="silver-rows"></div>
+
+      <p class="rates__note" id="note">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+        <span id="note-text"></span>
+      </p>
+    </section>
+
+    <section class="frame showcase" id="showcase">
+      <div class="showcase__label">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 14 9l6.5 2-6.5 2-2 6.5-2-6.5L3.5 11 10 9z"/></svg>
+        Latest Designs
+      </div>
+      <div id="shots"></div>
+      <p class="showcase__empty" id="showcase-empty">No pieces added yet</p>
+      <div class="showcase__caption" id="showcase-caption"></div>
+    </section>
+  </div>
+
+  <!-- -------------------------------------------------------- trust -- -->
+  <footer class="frame trust">
+    <div id="trust-items" style="display:contents"></div>
+    <div class="qr hidden" id="qr">
+      <img id="qr-img" alt="QR code linking to the shop's collection">
+      <p id="qr-label"></p>
+    </div>
+  </footer>
+</div>
+
+<script>
+/* ------------------------------------------------------------------ data --
+
+   One config document, re-read on a timer so an edit in the admin reaches the
+   counter on its own. Nobody is going to walk over and refresh a screen bolted
+   to a wall — the same reason the cafe board polls. */
+
+const $ = (id) => document.getElementById(id);
+
+const CONFIG_POLL_MS = 60000;
+const WEATHER_POLL_MS = 15 * 60 * 1000;
+const OFFLINE_AFTER = 3;
+
+let config = null;
+let failures = 0;
+
+const money = (n) =>
+  n === null || n === undefined
+    ? null
+    : n.toLocaleString('en-IN', {
+        minimumFractionDigits: Number.isInteger(n) ? 0 : 2,
+        maximumFractionDigits: 2,
+      });
+
+async function loadConfig() {
+  try {
+    const res = await fetch('/api/jewel');
+    if (!res.ok) throw new Error('config');
+    config = await res.json();
+    failures = 0;
+    $('offline').classList.add('hidden');
+    render();
+  } catch (err) {
+    failures += 1;
+    if (failures >= OFFLINE_AFTER) $('offline').classList.remove('hidden');
+  }
+}
+
+/* --------------------------------------------------------------- render -- */
+
+function render() {
+  const c = config;
+  document.title = `${c.shop.name} — Gold & Silver Rates`;
+
+  $('shop-name').textContent = c.shop.name;
+  $('shop-tagline').textContent = c.shop.tagline || '';
+
+  if (c.shop.logo) {
+    const img = document.createElement('img');
+    img.src = c.shop.logo;
+    img.alt = '';
+    // Keep the engraved-diamond stand-in if the upload has gone missing, so a
+    // broken URL never leaves a hole where the shop's mark should be.
+    img.addEventListener('error', () => img.remove());
+    $('brand-mark').replaceChildren(img);
+  }
+
+  renderDate();
+  renderRates();
+  renderTrust();
+  startRotation();
+}
+
+function renderDate() {
+  const now = new Date();
+  $('date').textContent = now.toLocaleDateString('en-IN', {
+    day: 'numeric', month: 'long', year: 'numeric',
+  });
+  $('weekday').textContent = now.toLocaleDateString('en-IN', { weekday: 'long' });
+}
+
+/* Two lines per metal, each with what it moved since yesterday. The delta is
+   the point of the panel: a rate on its own is a number, a rate with "+₹120"
+   beside it is a reason to buy today rather than next week. */
+function renderRates() {
+  const { gold, silver, note, updatedAt } = config.rates;
+
+  $('gold-purity').textContent = gold.purity ? `(${gold.purity})` : '';
+  $('silver-purity').textContent = silver.purity ? `(${silver.purity})` : '';
+
+  $('gold-rows').replaceChildren(
+    ...rateRow(gold.perGram, gold.prevPerGram, 'per gram'),
+    ...rateRow(gold.per8Gram, gold.prevPer8Gram, 'per 8 grams'),
+  );
+  $('silver-rows').replaceChildren(
+    ...rateRow(silver.perGram, silver.prevPerGram, 'per gram'),
+    ...rateRow(silver.perKg, silver.prevPerKg, 'per kg'),
+  );
+
+  const bits = [note, updatedAt && `Updated at ${updatedAt}`].filter(Boolean);
+  $('note-text').textContent = bits.join(' • ');
+  $('note').style.display = bits.length ? '' : 'none';
+}
+
+/** Returns an array so a blank rate contributes nothing rather than an empty row. */
+function rateRow(value, previous, unit) {
+  if (value === null || value === undefined) return [];
+
+  const row = document.createElement('div');
+  row.className = 'rate';
+
+  const left = document.createElement('div');
+  const amount = document.createElement('div');
+  amount.className = 'rate__value';
+  amount.textContent = `₹ ${money(value)}`;
+  const label = document.createElement('p');
+  label.className = 'rate__unit';
+  label.textContent = unit;
+  left.append(amount, label);
+  row.append(left);
+
+  // No previous figure means no claim about movement. Printing "+₹0" on a
+  // brand new screen would be inventing a comparison nobody made.
+  if (previous !== null && previous !== undefined) {
+    const diff = Math.round((value - previous) * 100) / 100;
+    const box = document.createElement('div');
+    box.className = `rate__delta ${diff > 0 ? 'is-up' : diff < 0 ? 'is-down' : 'is-flat'}`;
+
+    const big = document.createElement('b');
+    const arrow = document.createElement('i');
+    arrow.textContent = diff > 0 ? '▲' : diff < 0 ? '▼' : '■';
+    big.append(arrow, document.createTextNode(
+      diff === 0 ? 'No change' : `${diff > 0 ? '+' : '−'} ₹${money(Math.abs(diff))}`
+    ));
+
+    const since = document.createElement('small');
+    since.textContent = 'vs Yesterday';
+    box.append(big, since);
+    row.append(box);
+  }
+
+  return [row];
+}
+
+function renderTrust() {
+  $('trust-items').replaceChildren(...config.trust.map((t) => {
+    const box = document.createElement('div');
+    box.className = 'trust__item';
+    box.innerHTML = TRUST_ICON;
+    const p = document.createElement('p');
+    p.append(document.createTextNode(t.title));
+    if (t.detail) {
+      const span = document.createElement('span');
+      span.textContent = t.detail;
+      p.append(span);
+    }
+    box.append(p);
+    return box;
+  }));
+}
+
+const TRUST_ICON =
+  '<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M12 3l7 3v5.5c0 4.3-2.9 8.2-7 9.5-4.1-1.3-7-5.2-7-9.5V6z"/>' +
+  '<path d="m9 12 2 2 4-4"/></svg>';
+
+/* ------------------------------------------------------------- rotation -- */
+
+/* The featured pieces cross-fade on a timer with a slow drift across each
+   photograph. A still image on a screen reads as a screen that has frozen;
+   movement is what makes a passer-by look twice. */
+
+let shots = [];
+let shotIndex = 0;
+let shotTimer = null;
+let shownKey = '';
+
+function startRotation() {
+  const items = config.featured.items || [];
+  const key = items.map((i) => i.image).join('|');
+
+  // Rebuilt only when the pieces actually change: re-reading the config every
+  // minute must not restart the rotation from the first photo each time.
+  if (key !== shownKey) {
+    shownKey = key;
+    shotIndex = 0;
+    $('shots').replaceChildren(...items.map((item) => {
+      const box = document.createElement('div');
+      box.className = 'shot';
+      const img = document.createElement('img');
+      img.src = item.image;
+      img.alt = item.caption || '';
+      box.append(img);
+      return box;
+    }));
+    shots = [...$('shots').children];
+    paintShot();
+  }
+
+  $('showcase-empty').style.display = items.length ? 'none' : '';
+  $('body').classList.toggle('is-rates-only', items.length === 0);
+
+  clearInterval(shotTimer);
+  if (items.length > 1) {
+    shotTimer = setInterval(nextShot, Math.max(4, config.featured.seconds) * 1000);
+  }
+}
+
+function paintShot() {
+  shots.forEach((el, i) => el.classList.toggle('is-on', i === shotIndex));
+  const item = config.featured.items[shotIndex];
+  // The piece's own caption, or the shop's standing line for the panel.
+  $('showcase-caption').textContent = (item && item.caption) || config.featured.caption || '';
+}
+
+function nextShot() {
+  if (!shots.length) return;
+  shotIndex = (shotIndex + 1) % shots.length;
+  paintShot();
+}
+
+/* -------------------------------------------------------------- weather -- */
+
+const WX_ICONS = {
+  clear:
+    '<circle cx="12" cy="12" r="4.6" fill="#f5c542"/>' +
+    '<g stroke="#f5c542" stroke-width="1.8" stroke-linecap="round">' +
+    '<path d="M12 2.4v2.6M12 19v2.6M2.4 12H5M19 12h2.6M5.2 5.2 7 7M17 17l1.8 1.8M18.8 5.2 17 7M7 17l-1.8 1.8"/></g>',
+  partly:
+    '<circle cx="9" cy="8.5" r="3.6" fill="#f5c542"/>' +
+    '<path d="M8 18.5h8.6a3.4 3.4 0 0 0 .4-6.8 5 5 0 0 0-9.6.9A3.2 3.2 0 0 0 8 18.5z" fill="#e9edf2"/>',
+  cloudy:
+    '<path d="M7.5 18.5h9.1a3.6 3.6 0 0 0 .4-7.2 5.3 5.3 0 0 0-10.2 1A3.4 3.4 0 0 0 7.5 18.5z" fill="#cdd4dd"/>',
+  fog:
+    '<path d="M7.5 15h9.1a3.6 3.6 0 0 0 .4-7.2 5.3 5.3 0 0 0-10.2 1A3.4 3.4 0 0 0 7.5 15z" fill="#cdd4dd"/>' +
+    '<g stroke="#9fb0c2" stroke-width="1.6" stroke-linecap="round"><path d="M4 18h16M6 21h12"/></g>',
+  rain:
+    '<path d="M7.5 14.5h9.1a3.6 3.6 0 0 0 .4-7.2 5.3 5.3 0 0 0-10.2 1 3.4 3.4 0 0 0 .7 6.2z" fill="#cdd4dd"/>' +
+    '<g stroke="#5aa9e6" stroke-width="1.8" stroke-linecap="round"><path d="M9 17.5 8 21M13 17.5 12 21M17 17.5 16 21"/></g>',
+  snow:
+    '<path d="M7.5 14.5h9.1a3.6 3.6 0 0 0 .4-7.2 5.3 5.3 0 0 0-10.2 1 3.4 3.4 0 0 0 .7 6.2z" fill="#cdd4dd"/>' +
+    '<g stroke="#bfe3ff" stroke-width="1.6" stroke-linecap="round"><path d="M9 18v3M8 19.5h2M15 18v3M14 19.5h2"/></g>',
+  storm:
+    '<path d="M7.5 13.5h9.1a3.6 3.6 0 0 0 .4-7.2 5.3 5.3 0 0 0-10.2 1 3.4 3.4 0 0 0 .7 6.2z" fill="#b9c2cd"/>' +
+    '<path d="m12.5 15-3.5 4.5h2.6L10.5 23 15 17.8h-2.7z" fill="#f5c542"/>',
+};
+
+async function loadWeather() {
+  try {
+    const res = await fetch('/api/jewel/weather');
+    const wx = res.ok ? await res.json() : null;
+    // Null is a normal answer, not a failure: no city set, or the lookup is
+    // having a bad day. Either way the panel steps aside and the rates stay.
+    if (!wx) return $('wx').classList.add('hidden');
+
+    $('wx-icon').innerHTML =
+      `<svg class="wx__icon" viewBox="0 0 24 24">${WX_ICONS[wx.icon] || WX_ICONS.cloudy}</svg>`;
+    $('wx-temp').textContent = wx.now ?? '--';
+    $('wx-cond').textContent = wx.label;
+    $('wx-place').textContent = wx.place || '';
+    $('wx-high').textContent = wx.high === null ? '--°C' : `${wx.high}°C`;
+    $('wx-low').textContent = wx.low === null ? '--°C' : `${wx.low}°C`;
+    $('wx').classList.remove('hidden');
+  } catch (err) {
+    $('wx').classList.add('hidden');
+  }
+}
+
+/* ------------------------------------------------------------------ qr -- */
+
+async function loadQr() {
+  try {
+    const { dataUrl } = await (await fetch('/api/jewel/qr')).json();
+    if (!dataUrl) return $('qr').classList.add('hidden');
+    $('qr-img').src = dataUrl;
+    $('qr-label').textContent = config?.qr?.label || 'Scan to explore';
+    $('qr').classList.remove('hidden');
+  } catch (err) {
+    $('qr').classList.add('hidden');
+  }
+}
+
+/* ----------------------------------------------------------------- boot -- */
+
+loadConfig().then(loadQr);
+setInterval(loadConfig, CONFIG_POLL_MS);
+
+loadWeather();
+setInterval(loadWeather, WEATHER_POLL_MS);
+
+// Past midnight the date in the header would otherwise be yesterday's until
+// somebody reloaded a screen nobody is standing at.
+setInterval(renderDate, 60000);
+</script>
+</body>
+</html>

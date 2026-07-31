@@ -1,0 +1,721 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jewellery screen — Signage</title>
+<base href="/">
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/admin.css">
+<style>
+  .cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+    gap: 2rem;
+    align-items: start;
+  }
+
+  @media (max-width: 900px) {
+    .cols { grid-template-columns: 1fr; }
+  }
+
+  /* ---- image picker ---- */
+
+  .pic { display: flex; gap: 0.8rem; align-items: center; }
+
+  .pic__preview {
+    width: 96px;
+    height: 96px;
+    flex: none;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--line);
+    background: var(--paper-deep);
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+  }
+
+  .pic__preview img { width: 100%; height: 100%; object-fit: cover; }
+  .pic__preview span { font-size: 0.68rem; color: var(--ink-soft); text-align: center; padding: 0.2rem; }
+  .pic__side { flex: 1; min-width: 0; }
+  .pic__note { font-size: 0.72rem; color: var(--ink-soft); margin: 0.35rem 0 0; word-break: break-all; }
+
+  input[type="file"] { display: none; }
+
+  /* ---- rate rows ---- */
+
+  .rate-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.9rem;
+  }
+
+  @media (max-width: 620px) {
+    .rate-grid { grid-template-columns: 1fr; }
+  }
+
+  /* What the screen will print beside the figure. Shown while typing, because
+     the delta is the part staff cannot see anywhere else until it is on a TV
+     in front of customers. */
+  .delta {
+    font-size: 0.82rem;
+    margin: 0.35rem 0 0;
+    font-weight: 600;
+  }
+
+  .delta--up { color: #2f7d3f; }
+  .delta--down { color: var(--bad); }
+  .delta--flat, .delta--none { color: var(--ink-soft); font-weight: 500; }
+
+  /* ---- featured pieces ---- */
+
+  .piece {
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    background: var(--card);
+    padding: 1rem;
+    margin-bottom: 0.85rem;
+    display: grid;
+    grid-template-columns: 96px minmax(0, 1fr) auto;
+    gap: 1rem;
+    align-items: start;
+  }
+
+  @media (max-width: 700px) {
+    .piece { grid-template-columns: 1fr; }
+  }
+
+  .piece__order { display: flex; flex-direction: column; gap: 0.3rem; }
+  .piece__order .btn { padding: 0.25rem 0.5rem; font-size: 0.8rem; }
+
+  /* ---- sticky save bar ---- */
+
+  .bar {
+    position: sticky;
+    bottom: 0;
+    background: linear-gradient(180deg, rgba(253, 248, 239, 0) 0%, var(--cream) 45%);
+    padding: 1.2rem 0 0.9rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    align-items: center;
+    z-index: 5;
+  }
+
+  .bar__state { font-size: 0.82rem; color: var(--ink-soft); margin-left: auto; }
+  .bar__state[data-dirty="1"] { color: var(--bad); font-weight: 600; }
+
+  .is-armed { background: var(--bad) !important; border-color: var(--bad) !important; color: #fff !important; }
+
+  .side .card { position: sticky; top: 1rem; }
+  .side ul { margin: 0.4rem 0 0; padding-left: 1.1rem; font-size: 0.83rem; color: var(--ink-soft); line-height: 1.7; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top__inner">
+    <h1 class="top__brand">Signage <span class="top__where" id="shell-where"></span></h1>
+    <nav class="top__nav" id="shell-nav"></nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="cols">
+    <form id="editor">
+
+      <h2>Today's rates</h2>
+      <p class="hint">
+        Type today's counter rate. Yesterday's figure is kept automatically the
+        first time you save on a new day, and that is what the screen compares
+        against — so you never enter the change by hand. Leave a box empty and
+        the screen drops that line.
+      </p>
+
+      <div class="card">
+        <div class="row2">
+          <div class="field">
+            <label for="f-gold-purity">Gold purity</label>
+            <input id="f-gold-purity" type="text" maxlength="8" placeholder="24K" data-path="rates.gold.purity">
+          </div>
+          <div class="field">
+            <label for="f-updated">Updated at</label>
+            <input id="f-updated" type="text" maxlength="20" placeholder="10:00 AM" data-path="rates.updatedAt">
+          </div>
+        </div>
+        <div class="rate-grid" style="margin-top:0.9rem">
+          <div class="field">
+            <label for="f-gold-gram">Gold — per gram (₹)</label>
+            <input id="f-gold-gram" type="text" inputmode="decimal" data-path="rates.gold.perGram" data-money>
+            <p class="delta" id="d-gold-gram"></p>
+          </div>
+          <div class="field">
+            <label for="f-gold-8">Gold — per 8 grams (₹)</label>
+            <input id="f-gold-8" type="text" inputmode="decimal" data-path="rates.gold.per8Gram" data-money>
+            <p class="delta" id="d-gold-8"></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row2">
+          <div class="field">
+            <label for="f-silver-purity">Silver purity</label>
+            <input id="f-silver-purity" type="text" maxlength="8" placeholder="999" data-path="rates.silver.purity">
+          </div>
+          <div class="field">
+            <label for="f-note">Footnote</label>
+            <input id="f-note" type="text" maxlength="80" placeholder="Rates are inclusive of GST" data-path="rates.note">
+          </div>
+        </div>
+        <div class="rate-grid" style="margin-top:0.9rem">
+          <div class="field">
+            <label for="f-silver-gram">Silver — per gram (₹)</label>
+            <input id="f-silver-gram" type="text" inputmode="decimal" data-path="rates.silver.perGram" data-money>
+            <p class="delta" id="d-silver-gram"></p>
+          </div>
+          <div class="field">
+            <label for="f-silver-kg">Silver — per kg (₹)</label>
+            <input id="f-silver-kg" type="text" inputmode="decimal" data-path="rates.silver.perKg" data-money>
+            <p class="delta" id="d-silver-kg"></p>
+          </div>
+        </div>
+      </div>
+
+      <h2 style="margin-top:var(--s6)">Branding</h2>
+      <div class="card">
+        <div class="row2">
+          <div class="field">
+            <label for="f-shop-name">Shop name</label>
+            <input id="f-shop-name" type="text" maxlength="40" data-path="shop.name">
+          </div>
+          <div class="field">
+            <label for="f-shop-tagline">Tagline</label>
+            <input id="f-shop-tagline" type="text" maxlength="60" placeholder="Trusted since 1986" data-path="shop.tagline">
+          </div>
+        </div>
+        <div class="field" style="margin-top:0.9rem">
+          <span class="label">Logo</span>
+          <div class="pic" data-pic="logo"></div>
+        </div>
+      </div>
+
+      <h2 style="margin-top:var(--s6)">Weather</h2>
+      <p class="hint">
+        Live for the city you name, refreshed every fifteen minutes. No account
+        or API key — and if the lookup fails the panel simply steps aside rather
+        than holding up the rates.
+      </p>
+      <div class="card">
+        <div class="toggle">
+          <input id="f-wx-show" type="checkbox" data-path="weather.show" data-check>
+          <div>
+            <label class="toggle__text" for="f-wx-show">Show the weather panel</label>
+            <p class="hint" style="margin:0.25rem 0 0" id="wx-note">—</p>
+          </div>
+        </div>
+        <div class="row2" style="margin-top:0.9rem" id="wx-fields">
+          <div class="field">
+            <label for="f-wx-city">City</label>
+            <input id="f-wx-city" type="text" maxlength="60" placeholder="Mumbai" data-path="weather.city">
+          </div>
+          <div class="field">
+            <label for="f-wx-region">State or region</label>
+            <input id="f-wx-region" type="text" maxlength="60" placeholder="Maharashtra" data-path="weather.region">
+          </div>
+        </div>
+        <div class="actions-row">
+          <button class="btn btn--small" type="button" id="wx-check">Check this city</button>
+        </div>
+      </div>
+
+      <h2 style="margin-top:var(--s6)">Featured jewels</h2>
+      <p class="hint">
+        Two to four pieces, cross-fading on the right of the screen. A piece with
+        no caption of its own falls back to the panel's standing line.
+      </p>
+      <div class="card">
+        <div class="row2">
+          <div class="field">
+            <label for="f-caption">Standing caption</label>
+            <input id="f-caption" type="text" maxlength="80" placeholder="Timeless beauty. Crafted for you." data-path="featured.caption">
+          </div>
+          <div class="field">
+            <label for="f-seconds">Seconds per piece</label>
+            <input id="f-seconds" type="number" min="4" max="30" data-path="featured.seconds" data-num>
+          </div>
+        </div>
+        <p class="hint" style="margin:0.6rem 0 0" id="rotation-note"></p>
+      </div>
+      <div id="pieces"></div>
+      <div class="actions-row">
+        <button class="btn" type="button" id="add-piece">Add a piece</button>
+        <span class="hint" style="margin:0" id="piece-count"></span>
+      </div>
+
+      <h2 style="margin-top:var(--s6)">Trust strip &amp; QR</h2>
+      <div class="card">
+        <div class="row2">
+          <div class="field">
+            <label for="f-qr-url">QR links to</label>
+            <input id="f-qr-url" type="text" maxlength="300" placeholder="https://example.com/collection" data-path="qr.url">
+          </div>
+          <div class="field">
+            <label for="f-qr-label">QR caption</label>
+            <input id="f-qr-label" type="text" maxlength="60" placeholder="Scan to Explore Our Collection" data-path="qr.label">
+          </div>
+        </div>
+        <p class="hint" style="margin:0.6rem 0 0">Leave the link empty and the code is left off the screen.</p>
+      </div>
+      <div id="trust"></div>
+      <div class="actions-row">
+        <button class="btn" type="button" id="add-trust">Add a claim</button>
+        <span class="hint" style="margin:0" id="trust-count"></span>
+      </div>
+
+      <div class="bar">
+        <button class="btn btn--primary" type="submit" id="save">Save the screen</button>
+        <button class="btn btn--danger" type="button" id="reset">Reset to defaults</button>
+        <span class="bar__state" id="state">Loaded</span>
+      </div>
+    </form>
+
+    <aside class="side">
+      <div class="card">
+        <h2 style="font-size:1rem">This screen</h2>
+        <p class="hint" style="margin:0" id="side-url"></p>
+        <ul>
+          <li>The screen picks up a save on its next poll — no need to touch the TV.</li>
+          <li>Rates carry forward once a day: the first save on a new day files the old figure as yesterday's, later saves that day are treated as corrections.</li>
+          <li>An empty rate box drops that line from the screen rather than showing ₹0.</li>
+          <li>With no pieces added, the menu of rates takes the whole width.</li>
+        </ul>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<script type="module">
+import { shell, api, boot, flash, arm } from '/admin-shell.js';
+
+const $ = (id) => document.getElementById(id);
+
+await boot({
+  where: 'Jewellery screen',
+  nav: [
+    { href: '/admin/cafes', label: 'Cafes', ownerOnly: true },
+    { href: '/admin/jewel', label: 'Jewellery' },
+    { href: '/jewel', label: 'Screen ↗', blank: true },
+  ],
+});
+
+$('side-url').textContent = `${location.origin}/jewel`;
+
+/* Edited and saved as one document, like the cafe board: a screen showing half
+   a rate change because two fields saved separately would be worse than one
+   that saved nothing. */
+let config = await api('/api/jewel');
+let dirty = false;
+
+/* What was on the screen when this page loaded. The deltas shown while typing
+   compare against it, so staff can see the movement the screen will print
+   before they commit to it. */
+let baseline = JSON.parse(JSON.stringify(config.rates));
+
+const get = (path) => path.split('.').reduce((o, k) => (o == null ? o : o[k]), config);
+
+render();
+
+function set(path, value) {
+  const keys = path.split('.');
+  const last = keys.pop();
+  let node = config;
+  for (const k of keys) node = (node[k] = node[k] || {});
+  node[last] = value;
+  markDirty();
+}
+
+function markDirty() {
+  dirty = true;
+  $('state').textContent = 'Unsaved changes';
+  $('state').dataset.dirty = '1';
+}
+
+function markClean(label = 'Saved') {
+  dirty = false;
+  $('state').textContent = label;
+  $('state').dataset.dirty = '0';
+}
+
+addEventListener('beforeunload', (e) => {
+  if (!dirty) return;
+  e.preventDefault();
+  e.returnValue = '';
+});
+
+/* --------------------------------------------------------------- render -- */
+
+function render() {
+  for (const input of document.querySelectorAll('[data-path]')) {
+    const value = get(input.dataset.path);
+
+    if ('check' in input.dataset) {
+      input.checked = value === undefined ? true : Boolean(value);
+      input.onchange = () => { set(input.dataset.path, input.checked); describeWeather(); };
+      continue;
+    }
+
+    input.value = value === null || value === undefined ? '' : value;
+    input.oninput = () => {
+      if ('money' in input.dataset) {
+        // Empty means "drop this line", which is a different thing from zero —
+        // so blank stays null all the way to the server rather than becoming 0.
+        const raw = input.value.trim();
+        set(input.dataset.path, raw === '' ? null : raw);
+        describeDeltas();
+      } else if ('num' in input.dataset) {
+        set(input.dataset.path, Number(input.value));
+        describeRotation();
+      } else {
+        set(input.dataset.path, input.value);
+      }
+    };
+  }
+
+  renderPicker(document.querySelector('[data-pic="logo"]'), {
+    value: config.shop.logo || '',
+    placeholder: 'No logo',
+    onChange: (url) => set('shop.logo', url),
+  });
+
+  renderPieces();
+  renderTrust();
+  describeDeltas();
+  describeRotation();
+  describeWeather();
+}
+
+const num = (v) => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(String(v).replace(/[,\s₹]/g, ''));
+  return Number.isFinite(n) ? n : null;
+};
+
+const inr = (n) => n.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+
+/**
+ * Spells out the change the screen will print, against the figure that was
+ * live when this page loaded. Typing a rate is the one edit here whose effect
+ * is invisible until it is on a TV in a shop, so it gets shown as you type.
+ */
+function describeDeltas() {
+  const rows = [
+    ['d-gold-gram', num(config.rates.gold.perGram), baseline.gold.perGram, baseline.gold.prevPerGram],
+    ['d-gold-8', num(config.rates.gold.per8Gram), baseline.gold.per8Gram, baseline.gold.prevPer8Gram],
+    ['d-silver-gram', num(config.rates.silver.perGram), baseline.silver.perGram, baseline.silver.prevPerGram],
+    ['d-silver-kg', num(config.rates.silver.perKg), baseline.silver.perKg, baseline.silver.prevPerKg],
+  ];
+
+  for (const [id, now, was, prev] of rows) {
+    const el = $(id);
+    if (now === null) {
+      el.className = 'delta delta--none';
+      el.textContent = 'Empty — this line is left off the screen.';
+      continue;
+    }
+
+    // Unchanged from what is live: the screen keeps comparing against the
+    // figure it already had, so that is the honest thing to show.
+    const against = now === was ? prev : was;
+    if (against === null || against === undefined) {
+      el.className = 'delta delta--none';
+      el.textContent = 'No earlier figure yet — no change is shown.';
+      continue;
+    }
+
+    const diff = Math.round((now - against) * 100) / 100;
+    el.className = `delta delta--${diff > 0 ? 'up' : diff < 0 ? 'down' : 'flat'}`;
+    el.textContent = diff === 0
+      ? 'Screen shows: no change vs yesterday'
+      : `Screen shows: ${diff > 0 ? '▲ +' : '▼ −'}₹${inr(Math.abs(diff))} vs yesterday`;
+  }
+}
+
+function describeRotation() {
+  const count = (config.featured.items || []).length;
+  const seconds = Math.max(4, Number(config.featured.seconds) || 8);
+  $('rotation-note').textContent = count < 2
+    ? count === 1
+      ? 'One piece, so the panel holds still.'
+      : 'No pieces yet — the rates take the whole screen.'
+    : `${count} pieces at ${seconds}s each — the panel comes back round every ${count * seconds}s.`;
+}
+
+function describeWeather() {
+  const off = config.weather.show === false;
+  $('wx-fields').classList.toggle('is-muted', off);
+  if (off) $('wx-note').textContent = 'The header shows the rates and the date only.';
+  else if (!config.weather.city) $('wx-note').textContent = 'Name a city, or the panel stays hidden.';
+  else $('wx-note').textContent = 'Live, refreshed every fifteen minutes.';
+}
+
+/* -------------------------------------------------------------- pieces -- */
+
+function renderPieces() {
+  config.featured.items = config.featured.items || [];
+  $('pieces').replaceChildren(...config.featured.items.map((item, i) => pieceRow(item, i)));
+  $('piece-count').textContent = `${config.featured.items.length} of 4`;
+  $('add-piece').disabled = config.featured.items.length >= 4;
+  describeRotation();
+}
+
+function pieceRow(item, index) {
+  const box = document.createElement('div');
+  box.className = 'piece';
+
+  const pic = document.createElement('div');
+  pic.className = 'pic';
+  pic.style.display = 'block';
+  renderPicker(pic, {
+    value: item.image || '',
+    placeholder: 'No photo',
+    onChange: (url) => { item.image = url; markDirty(); },
+  });
+
+  const fields = document.createElement('div');
+  fields.append(field('Caption', item.caption, 80, (v) => { item.caption = v; markDirty(); }));
+
+  const order = document.createElement('div');
+  order.className = 'piece__order';
+  order.append(
+    iconButton('↑', index === 0, () => move(config.featured.items, index, -1, renderPieces)),
+    iconButton('↓', index === config.featured.items.length - 1, () => move(config.featured.items, index, 1, renderPieces)),
+    iconButton('✕', false, () => {
+      config.featured.items.splice(index, 1);
+      markDirty();
+      renderPieces();
+    }),
+  );
+
+  box.append(pic, fields, order);
+  return box;
+}
+
+/* --------------------------------------------------------------- trust -- */
+
+function renderTrust() {
+  config.trust = config.trust || [];
+  $('trust').replaceChildren(...config.trust.map((t, i) => {
+    const box = document.createElement('div');
+    box.className = 'piece';
+    box.style.gridTemplateColumns = 'minmax(0, 1fr) auto';
+
+    const fields = document.createElement('div');
+    fields.className = 'row2';
+    fields.append(
+      field('Claim', t.title, 30, (v) => { t.title = v; markDirty(); }),
+      field('Second line', t.detail, 30, (v) => { t.detail = v; markDirty(); }),
+    );
+
+    const order = document.createElement('div');
+    order.className = 'piece__order';
+    order.append(
+      iconButton('↑', i === 0, () => move(config.trust, i, -1, renderTrust)),
+      iconButton('↓', i === config.trust.length - 1, () => move(config.trust, i, 1, renderTrust)),
+      iconButton('✕', false, () => { config.trust.splice(i, 1); markDirty(); renderTrust(); }),
+    );
+
+    box.append(fields, order);
+    return box;
+  }));
+  $('trust-count').textContent = `${config.trust.length} of 4`;
+  $('add-trust').disabled = config.trust.length >= 4;
+}
+
+/* --------------------------------------------------------------- parts -- */
+
+function field(label, value, max, onInput) {
+  const wrap = document.createElement('div');
+  wrap.className = 'field';
+  const l = document.createElement('label');
+  l.textContent = label;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.maxLength = max;
+  input.value = value || '';
+  input.addEventListener('input', () => onInput(input.value));
+  const id = `f-${Math.random().toString(36).slice(2, 9)}`;
+  input.id = id;
+  l.htmlFor = id;
+  wrap.append(l, input);
+  return wrap;
+}
+
+function iconButton(glyph, disabled, onClick) {
+  const b = document.createElement('button');
+  b.className = 'btn btn--small';
+  b.type = 'button';
+  b.textContent = glyph;
+  b.disabled = disabled;
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+function move(list, index, delta, rerender) {
+  const to = index + delta;
+  if (to < 0 || to >= list.length) return;
+  [list[index], list[to]] = [list[to], list[index]];
+  markDirty();
+  rerender();
+}
+
+/**
+ * Upload-or-clear image control. The file goes up immediately rather than being
+ * held until save: the config stores a URL, so there is nothing to put in the
+ * field until the bytes have landed somewhere.
+ */
+function renderPicker(host, { value, placeholder, onChange }) {
+  host.replaceChildren();
+
+  const preview = document.createElement('div');
+  preview.className = 'pic__preview';
+
+  const paint = (url) => {
+    preview.replaceChildren();
+    if (url) {
+      const img = document.createElement('img');
+      img.src = url;
+      img.alt = '';
+      img.addEventListener('error', () => {
+        preview.replaceChildren(Object.assign(document.createElement('span'), { textContent: 'Missing' }));
+      });
+      preview.append(img);
+    } else {
+      preview.append(Object.assign(document.createElement('span'), { textContent: placeholder }));
+    }
+  };
+  paint(value);
+
+  const side = document.createElement('div');
+  side.className = 'pic__side';
+
+  const file = document.createElement('input');
+  file.type = 'file';
+  file.accept = 'image/*';
+
+  const pick = document.createElement('button');
+  pick.className = 'btn btn--small';
+  pick.type = 'button';
+  pick.textContent = value ? 'Replace' : 'Upload';
+  pick.addEventListener('click', () => file.click());
+
+  const clear = document.createElement('button');
+  clear.className = 'btn btn--small';
+  clear.type = 'button';
+  clear.textContent = 'Clear';
+  clear.disabled = !value;
+  clear.addEventListener('click', () => {
+    onChange('');
+    renderPicker(host, { value: '', placeholder, onChange });
+  });
+
+  const note = document.createElement('p');
+  note.className = 'pic__note';
+  note.textContent = value || '';
+
+  file.addEventListener('change', async () => {
+    const chosen = file.files[0];
+    if (!chosen) return;
+    pick.disabled = true;
+    pick.textContent = 'Uploading…';
+    try {
+      const body = new FormData();
+      body.append('image', chosen);
+      const { url } = await api('/api/jewel/image', { method: 'POST', body });
+      onChange(url);
+      renderPicker(host, { value: url, placeholder, onChange });
+      flash('Image uploaded.');
+    } catch (err) {
+      flash(err.message, 'bad');
+      pick.disabled = false;
+      pick.textContent = value ? 'Replace' : 'Upload';
+    }
+  });
+
+  const row = document.createElement('div');
+  row.className = 'actions-row';
+  row.append(pick, clear);
+  side.append(row, note, file);
+  host.append(preview, side);
+}
+
+/* ---------------------------------------------------------------- acts -- */
+
+$('add-piece').addEventListener('click', () => {
+  config.featured.items.push({ image: '', caption: '' });
+  markDirty();
+  renderPieces();
+});
+
+$('add-trust').addEventListener('click', () => {
+  config.trust.push({ title: '', detail: '' });
+  markDirty();
+  renderTrust();
+});
+
+/* Checks the city resolves before it is trusted on a wall. A typo here is
+   otherwise invisible: the panel just quietly never appears. */
+$('wx-check').addEventListener('click', async () => {
+  const btn = $('wx-check');
+  btn.disabled = true;
+  btn.textContent = 'Checking…';
+  try {
+    const wx = await api('/api/jewel/weather');
+    if (!wx) throw new Error('No weather came back for that city. Check the spelling, or save first — the lookup uses the saved city.');
+    flash(`${wx.place}: ${wx.now}°C, ${wx.label.toLowerCase()}.`);
+  } catch (err) {
+    flash(err.message, 'bad');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Check this city';
+  }
+});
+
+$('editor').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('save').disabled = true;
+  $('save').textContent = 'Saving…';
+  try {
+    // Take back what the server stored, not what was typed: it trims, clamps
+    // and rolls yesterday's rates forward, and the form should show the result.
+    config = await api('/api/jewel', { method: 'PUT', body: config });
+    baseline = JSON.parse(JSON.stringify(config.rates));
+    render();
+    markClean();
+    flash('Saved — the screen will pick it up shortly.');
+  } catch (err) {
+    flash(err.message, 'bad');
+  } finally {
+    $('save').disabled = false;
+    $('save').textContent = 'Save the screen';
+  }
+});
+
+arm($('reset'), {
+  idleLabel: 'Reset to defaults',
+  armedLabel: 'Click again to reset',
+  onConfirm: async () => {
+    try {
+      config = await api('/api/jewel/reset', { method: 'POST' });
+      baseline = JSON.parse(JSON.stringify(config.rates));
+      render();
+      markClean('Reset');
+      flash('Back to the shipped demo content.');
+    } catch (err) {
+      flash(err.message, 'bad');
+    }
+  },
+});
+</script>
+</body>
+</html>
