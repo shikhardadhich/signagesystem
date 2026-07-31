@@ -33,6 +33,25 @@ const REFRESH_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
 const enabled = cafes.isCloud && Boolean(cafes.db);
 const db = cafes.db;
 
+/**
+ * A second client, used only for signing a person in and refreshing them.
+ *
+ * supabase-js remembers the session on whichever client performed the sign-in
+ * and sends that user's JWT on every later request from it. Calling
+ * signInWithPassword on the shared service-role client therefore demotes it to
+ * whoever signed in last: the very next table write runs as `authenticated`,
+ * meets RLS with no policies, and fails with "new row violates row-level
+ * security policy". Keeping the two apart means `db` is always the service role
+ * and this one is always the visitor.
+ */
+const authDb = enabled
+  ? require('@supabase/supabase-js').createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY,
+      { auth: { persistSession: false, autoRefreshToken: false } }
+    )
+  : null;
+
 /** Stands in for a profile when auth is switched off, so callers need no branch. */
 const DEV_OWNER = { id: 'dev', email: 'dev@localhost', role: 'owner', cafeId: null, dev: true };
 
@@ -103,7 +122,7 @@ async function profileFor(user) {
 async function login(email, password) {
   if (!enabled) throw bad('Sign-in needs Supabase configured.', 503);
 
-  const { data, error } = await db.auth.signInWithPassword({
+  const { data, error } = await authDb.auth.signInWithPassword({
     email: String(email || '').trim(),
     password: String(password || ''),
   });
@@ -126,14 +145,14 @@ async function resolve(req, res) {
   const token = cookies[ACCESS_COOKIE];
 
   if (token) {
-    const { data, error } = await db.auth.getUser(token);
+    const { data, error } = await authDb.auth.getUser(token);
     if (!error && data?.user) return profileFor(data.user);
   }
 
   const refresh = cookies[REFRESH_COOKIE];
   if (!refresh) return null;
 
-  const { data, error } = await db.auth.refreshSession({ refresh_token: refresh });
+  const { data, error } = await authDb.auth.refreshSession({ refresh_token: refresh });
   if (error || !data?.session) {
     if (res) clearSession(res);
     return null;
