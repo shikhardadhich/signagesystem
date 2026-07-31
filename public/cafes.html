@@ -161,6 +161,12 @@ import { shell, api, boot, flash, arm } from '/admin-shell.js';
 
 const $ = (id) => document.getElementById(id);
 
+/* Declared up here, not beside loadCafes() below. This module runs at the top
+   level, so the render call further down happens before a `let` further down
+   still is initialised — assigning to it from loadCafes() then throws
+   "Cannot access 'cafeList' before initialization" and the grid stays empty. */
+let cafeList = [];
+
 const profile = await boot({
   where: 'Cafes',
   nav: [{ href: '/admin/cafes', label: 'Cafes', ownerOnly: true }],
@@ -176,8 +182,6 @@ if (profile.role !== 'owner') {
 }
 
 /* ---------------------------------------------------------------- cafes -- */
-
-let cafeList = [];
 
 async function loadCafes() {
   cafeList = await api('/api/cafes');

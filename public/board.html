@@ -54,6 +54,18 @@
 
   .pic__side { flex: 1; min-width: 0; }
 
+  /* A menu item's picker lives in a narrow column beside its fields, so there
+     is no room for preview and buttons side by side — stack them instead. The
+     long URL under the buttons is dropped here for the same reason; the
+     preview already says whether a photo is set. */
+  .pic--compact {
+    display: block;
+  }
+
+  .pic--compact .pic__preview { width: 100%; height: 76px; }
+  .pic--compact .pic__side { margin-top: 0.5rem; }
+  .pic--compact .pic__note { display: none; }
+
   .pic__note {
     font-size: 0.72rem;
     color: var(--ink-soft);
@@ -266,11 +278,17 @@ $('side-url').textContent = `${location.origin}/${cafeId}`;
 let board = await api(`/api/cafes/${cafeId}/board`);
 let dirty = false;
 
+/* Declared before the first render(), not with set() below it: this module runs
+   at the top level, so a `const` further down is still in its temporal dead
+   zone when render() reads it — "Cannot access 'get' before initialization",
+   and the editor never paints. set() is a function declaration, so hoisting
+   already covers it. */
+const get = (path) => path.split('.').reduce((o, k) => (o == null ? o : o[k]), board);
+
 render();
 
 /* ---------------------------------------------------------------- paths -- */
 
-const get = (path) => path.split('.').reduce((o, k) => (o == null ? o : o[k]), board);
 
 function set(path, value) {
   const keys = path.split('.');
@@ -355,7 +373,6 @@ function itemRow(item, index) {
 
   const pic = document.createElement('div');
   pic.className = 'pic';
-  pic.style.display = 'block';
   renderPicker(pic, {
     value: item.image || item.fallback || '',
     placeholder: 'No photo',
@@ -471,7 +488,10 @@ function move(list, index, delta, rerender) {
  */
 function renderPicker(host, { value, placeholder, onChange, compact }) {
   host.replaceChildren();
-  host.style.display = 'flex';
+  /* Set as a class rather than an inline style: renderPicker rebuilds the host
+     after every upload, and an inline `display: flex` here would silently win
+     over the compact layout a caller asked for. */
+  host.classList.toggle('pic--compact', Boolean(compact));
 
   const preview = document.createElement('div');
   preview.className = 'pic__preview';
