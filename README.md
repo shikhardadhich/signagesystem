@@ -84,14 +84,16 @@ established year, logo, the section heading, the items, the bottom banner, and
 the QR panel's copy and steps. The screen re-reads the board once a minute, so a
 save reaches the TV on its own — nobody has to walk over to it.
 
-**Images** are uploaded through the editor and written into the app's own folder,
-under `public/assets/board/<cafe>/`. Images a board no longer refers to are
+**Images** are uploaded through the editor and go wherever the selfies go: a
+Supabase bucket or Vercel Blob when one is configured, otherwise the app's own
+`public/assets/board/<cafe>/` folder. Images a board no longer refers to are
 deleted after a save, so replacing a photo repeatedly doesn't accumulate junk.
 
-> This means board images need a writable disk. On a serverless host
-> (Vercel, Cloud Functions) the filesystem is read-only and the upload will
-> refuse with a message saying so. Selfies are unaffected — they go to the
-> configured object store either way.
+> They used to be written to disk unconditionally, which cannot work on a
+> serverless host — the filesystem is read-only there, and the upload failed
+> with "cannot write to its own folder" while selfies kept working. If you see
+> that message now, the deployment has no object store at all: set
+> `BLOB_READ_WRITE_TOKEN` or the Supabase variables and redeploy.
 
 **A rotating board.** More items than fit on the panel are dealt out a page at a
 time and the page turns on a timer, the way the boards in a coffee-shop chain do.
@@ -423,7 +425,8 @@ never leaves anything behind.
 ```
 server.js          Express app and routes (exports the app; listens only via npm start)
 store.js           selfie storage drivers: local disk, Supabase, Firebase, or Vercel Blob
-cafes.js           cafes and their menu boards, plus board image uploads
+cafes.js           cafes and their menu boards
+assets.js          board image storage: Supabase, Vercel Blob, or local disk
 auth.js            staff accounts and role checks, on Supabase Auth
 moderate.js        OpenAI moderation for the name, message and photo
 supabase.sql       Supabase schema — run once in the SQL Editor

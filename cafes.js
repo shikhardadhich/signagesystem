@@ -27,10 +27,10 @@ const DATA_DIR = path.join(__dirname, 'data');
 const CAFES_FILE = path.join(DATA_DIR, 'cafes.json');
 const DEFAULT_BOARD_FILE = path.join(__dirname, 'public', 'menu.json');
 
-/* Board images are written into the app folder and served as static files.
-   Per-cafe subfolders so deleting a cafe is one directory to remove and two
-   cafes can both have a "logo.png" without collision. */
-const BOARD_IMAGE_DIR = path.join(__dirname, 'public', 'assets', 'board');
+/* Board images go through their own storage module, which picks a backend the
+   same way the selfie storage does. Per-cafe prefixes so deleting a cafe is one
+   sweep and two cafes can both have a "logo.png" without collision. */
+const assets = require('./assets');
 
 const hasSupabase = Boolean(
   process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY)
@@ -169,36 +169,31 @@ const EXT = {
 };
 
 /**
- * Writes an uploaded image into the app folder and returns the URL the board
- * should store.
+ * Stores an uploaded image and returns the URL the board should keep.
  *
- * This is deliberately the server's own filesystem rather than an object store.
- * It works on any ordinary webserver; on a read-only serverless runtime it
- * cannot, so the failure says so plainly instead of surfacing as EROFS.
+ * Where it goes is assets.js's decision, and it follows the same environment as
+ * the selfie storage: a Supabase bucket or Vercel Blob when hosted, the app's
+ * own public/assets/board/ folder when running on an ordinary server. Writing
+ * to disk unconditionally is what used to break this on serverless, where the
+ * filesystem is read-only.
  */
 async function saveImage(cafeId, file) {
   const ext = EXT[file.mimetype];
   if (!ext) throw bad('Images must be JPEG, PNG, WEBP, GIF or SVG.');
 
-  const dir = path.join(BOARD_IMAGE_DIR, cafeId);
   try {
-    await fs.promises.mkdir(dir, { recursive: true });
+    return await assets.save(cafeId, file, ext);
   } catch (err) {
-    throw bad(
-      'This deployment cannot write to its own folder, so board images cannot be ' +
-      'uploaded here. That is normal on a serverless host, where the filesystem ' +
-      'is read-only — run the app on a server with a writable disk.',
-      503
-    );
+    if (err.code === 'EROFS' || err.code === 'EACCES' || err.code === 'EPERM') {
+      throw bad(
+        'This deployment cannot write to its own folder, so board images cannot be ' +
+        'saved here. Configure a Supabase bucket or a Vercel Blob store (see ' +
+        'README.md) and redeploy.',
+        503
+      );
+    }
+    throw bad(`The image could not be saved (${err.code || err.message}).`, 503);
   }
-
-  const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
-  try {
-    await fs.promises.writeFile(path.join(dir, filename), file.buffer);
-  } catch (err) {
-    throw bad(`The image could not be saved to disk (${err.code || err.message}).`, 503);
-  }
-  return `/assets/board/${cafeId}/${filename}`;
 }
 
 /**
@@ -207,24 +202,13 @@ async function saveImage(cafeId, file) {
  * leave the board pointing at nothing.
  */
 async function pruneImages(cafeId, board) {
-  const dir = path.join(BOARD_IMAGE_DIR, cafeId);
-  const keep = referencedImages(board);
-  let files;
-  try {
-    files = await fs.promises.readdir(dir);
-  } catch (err) {
-    return;
-  }
-  await Promise.all(
-    files
-      .filter((f) => !keep.has(`/assets/board/${cafeId}/${f}`))
-      .map((f) => fs.promises.unlink(path.join(dir, f)).catch(() => {}))
-  );
+  // Never let tidying up fail a board save that has already succeeded — a
+  // leftover file is cheaper than a rejected edit.
+  await assets.prune(cafeId, referencedImages(board)).catch(() => {});
 }
 
 async function removeImages(cafeId) {
-  await fs.promises.rm(path.join(BOARD_IMAGE_DIR, cafeId), { recursive: true, force: true })
-    .catch(() => {});
+  await assets.removeAll(cafeId).catch(() => {});
 }
 
 /* --------------------------------------------------------------- local -- */
