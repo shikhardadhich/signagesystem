@@ -322,7 +322,22 @@ let dirty = false;
    before they commit to it. */
 let baseline = JSON.parse(JSON.stringify(config.rates));
 
+/* These three are declared before the first render(), not further down beside
+   the code that reads them. This module runs at the top level, so a `const`
+   below render() is still in its temporal dead zone when render() reaches it —
+   the module throws "Cannot access 'num' before initialization", every
+   listener below is never attached, and the page looks fine while none of its
+   buttons do anything. Function declarations hoist, so only the arrows need
+   this care. */
 const get = (path) => path.split('.').reduce((o, k) => (o == null ? o : o[k]), config);
+
+const num = (v) => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(String(v).replace(/[,\s₹]/g, ''));
+  return Number.isFinite(n) ? n : null;
+};
+
+const inr = (n) => n.toLocaleString('en-IN', { maximumFractionDigits: 2 });
 
 render();
 
@@ -394,14 +409,6 @@ function render() {
   describeRotation();
   describeWeather();
 }
-
-const num = (v) => {
-  if (v === null || v === undefined || v === '') return null;
-  const n = Number(String(v).replace(/[,\s₹]/g, ''));
-  return Number.isFinite(n) ? n : null;
-};
-
-const inr = (n) => n.toLocaleString('en-IN', { maximumFractionDigits: 2 });
 
 /**
  * Spells out the change the screen will print, against the figure that was
