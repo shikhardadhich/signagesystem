@@ -231,11 +231,20 @@
     min-height: 0;
     display: grid;
     place-items: center;
+    /* Belt and braces with the image's own cap below: an oversized photo is
+       clipped rather than allowed to paint over the name beneath it. */
+    overflow: hidden;
   }
 
   .item__shot img {
     max-width: 100%;
-    max-height: 100%;
+    /* 26vh, not 100%. The row this sits in is sized by its own content, so the
+       box has no definite height for a percentage to resolve against — the
+       photo kept its natural size and ran straight over the item's name. It
+       went unnoticed while the column was narrow enough that max-width capped
+       every photo first; widening the menu to fill a screen with no selfie
+       panel is what exposed it. */
+    max-height: 26vh;
     object-fit: contain;
     /* No drop-shadow: the product photos are opaque rectangles whose backdrop
        already matches the card, so a filter shadow would outline the rectangle
