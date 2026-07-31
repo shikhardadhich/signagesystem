@@ -95,6 +95,14 @@ deleted after a save, so replacing a photo repeatedly doesn't accumulate junk.
 > that message now, the deployment has no object store at all: set
 > `BLOB_READ_WRITE_TOKEN` or the Supabase variables and redeploy.
 
+**A menu-only screen.** *Selfie panel → Show the selfie panel on the screen*
+turns the whole right-hand panel off: no QR, no steps, no live thumbnails, the
+menu widened to fill the TV, and no selfie takeovers. It is a display setting,
+not a destructive one — the queue and the upload page carry on, and switching it
+back on restores the wall untouched. Takeovers stop with the panel deliberately:
+with no QR on screen there is nothing to scan, so a photo taking over the room's
+TV would be one nobody in the room had any way of sending.
+
 **A rotating board.** More items than fit on the panel are dealt out a page at a
 time and the page turns on a timer, the way the boards in a coffee-shop chain do.
 Two settings control it: how many items show at once, and how long each page

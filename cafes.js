@@ -137,6 +137,10 @@ function normalise(input, cafeName) {
       subtitle: str(board.banner?.subtitle, 140),
     },
     wall: {
+      /* Some sites want the TV to be a menu board and nothing else. Absent
+         means shown: every board saved before this option existed had the
+         panel, and a missing field must not silently blank it. */
+      show: board.wall?.show === undefined ? true : Boolean(board.wall.show),
       kicker: str(board.wall?.kicker, 40),
       title: str(board.wall?.title, 40),
       subtitle: str(board.wall?.subtitle, 90),

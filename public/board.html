@@ -207,8 +207,22 @@
       </div>
 
       <h2 style="margin-top:var(--s6)">Selfie panel</h2>
-      <p class="hint">The right-hand panel beside the QR code.</p>
+      <p class="hint">The right-hand panel with the QR code, the steps and the live thumbnails.</p>
       <div class="card">
+        <div class="toggle">
+          <input id="f-wall-show" type="checkbox" data-path="wall.show" data-check>
+          <div>
+            <label class="toggle__text" for="f-wall-show">Show the selfie panel on the screen</label>
+            <p class="hint">
+              Turn this off for a plain menu board: the panel disappears, the menu
+              fills the whole screen, and selfies stop taking it over. Photos
+              already uploaded are kept — switching it back on brings the wall back
+              exactly as it was.
+            </p>
+          </div>
+        </div>
+      </div>
+      <div class="card" id="wall-fields">
         <div class="row2">
           <div class="field">
             <label for="f-wall-kicker">Kicker</label>
@@ -225,11 +239,13 @@
         </div>
       </div>
 
-      <h2 style="margin-top:var(--s6)">How it works</h2>
-      <div class="steps" id="steps"></div>
-      <div class="actions-row">
-        <button class="btn" type="button" id="add-step">Add a step</button>
-        <span class="hint" style="margin:0" id="step-count"></span>
+      <div id="steps-block">
+        <h2 style="margin-top:var(--s6)">How it works</h2>
+        <div class="steps" id="steps"></div>
+        <div class="actions-row">
+          <button class="btn" type="button" id="add-step">Add a step</button>
+          <span class="hint" style="margin:0" id="step-count"></span>
+        </div>
       </div>
 
       <div class="bar">
@@ -324,6 +340,17 @@ addEventListener('beforeunload', (e) => {
 function render() {
   for (const input of document.querySelectorAll('[data-path]')) {
     const value = get(input.dataset.path);
+
+    if ('check' in input.dataset) {
+      // Absent means on: boards saved before a switch existed had the feature.
+      input.checked = value === undefined ? true : Boolean(value);
+      input.onchange = () => {
+        set(input.dataset.path, input.checked);
+        describeWall();
+      };
+      continue;
+    }
+
     input.value = value == null ? '' : value;
     input.oninput = () => {
       set(input.dataset.path, 'num' in input.dataset ? Number(input.value) : input.value);
@@ -340,6 +367,18 @@ function render() {
   renderItems();
   renderSteps();
   describeRotation();
+  describeWall();
+}
+
+/**
+ * Greys out the panel's wording while the panel itself is switched off, so it
+ * is obvious that editing a kicker nobody will see is wasted effort — without
+ * hiding the fields, which would make the setting look destructive.
+ */
+function describeWall() {
+  const off = board.wall?.show === false;
+  $('wall-fields').classList.toggle('is-muted', off);
+  $('steps-block').classList.toggle('is-muted', off);
 }
 
 /**

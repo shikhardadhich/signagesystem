@@ -43,6 +43,13 @@
 
   /* ---------------------------------------------------------- board ---- */
 
+  /* Menu-only mode: the selfie panel is gone and the menu takes the whole
+     screen, rather than leaving a third of a TV empty. */
+  body.is-menu-only .panel { display: none; }
+  body.is-menu-only .board { grid-template-columns: 1fr; }
+  /* No wall to switch between looping and live, so the staff control goes too. */
+  body.is-menu-only .control { display: none; }
+
   .board {
     display: grid;
     grid-template-columns: 1fr 34.5%;
@@ -834,6 +841,7 @@ function renderMenu(m) {
   $('section-title').textContent = m.sectionTitle || 'Our Signatures';
   $('banner-title').textContent = m.banner?.title || '';
   $('banner-sub').textContent = m.banner?.subtitle || '';
+  applyMenuOnly(m.wall?.show === false);
   $('wall-kicker').textContent = m.wall?.kicker || '';
   $('wall-title').textContent = m.wall?.title || '';
   $('wall-sub').textContent = m.wall?.subtitle || '';
@@ -1009,12 +1017,51 @@ function placeholder() {
   return box;
 }
 
+/* ---- menu-only mode ----
+
+   A cafe that wants a plain menu board turns the selfie panel off in the admin.
+   Hiding it is not just cosmetic: with no QR on screen there is nothing to
+   scan, so a selfie taking over the whole TV would be a photo nobody in the
+   room had any way of sending. The takeovers stop with the panel, and the
+   loop/live control goes with them — there is no wall left to switch. */
+
+/* null, not false: the first board load must run one branch or the other, and
+   with false a screen that shows the panel would never fetch its QR. */
+let menuOnly = null;
+
+function applyMenuOnly(on) {
+  if (on === menuOnly) return;
+  menuOnly = on;
+  document.body.classList.toggle('is-menu-only', on);
+  if (on) {
+    // Leave a takeover already on screen rather than cutting it mid-photo;
+    // showToken makes the running one bow out at its next checkpoint.
+    showToken += 1;
+    clearTimeout(cycleTimer);
+    document.body.classList.remove('is-takeover');
+    resumeMenuRotation();
+    el.control.classList.remove('is-visible');
+  } else {
+    loadQr();
+    clearTimeout(cycleTimer);
+    cycleTimer = setTimeout(cycle, BOARD_REST_MS);
+  }
+}
+
 /* ---- QR ---- */
 
-fetch(at('/qr'))
-  .then((r) => r.json())
-  .then(({ dataUrl }) => { $('qr-img').src = dataUrl; })
-  .catch(() => {});
+/* Fetched on demand rather than at load: generating a code for a screen that
+   never shows one is pure waste, and the board tells us which this is. */
+let qrLoaded = false;
+
+function loadQr() {
+  if (qrLoaded) return;
+  qrLoaded = true;
+  fetch(at('/qr'))
+    .then((r) => r.json())
+    .then(({ dataUrl }) => { $('qr-img').src = dataUrl; })
+    .catch(() => { qrLoaded = false; });
+}
 
 /* ---- polling ---- */
 
@@ -1126,6 +1173,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
  * only the last one being seen.
  */
 async function checkForNewArrival() {
+  if (menuOnly) return;
   if (document.body.classList.contains('is-takeover')) return;
   const fresh = queue
     .filter((s) => (s.decidedAt || 0) > watermark)
@@ -1139,6 +1187,7 @@ async function checkForNewArrival() {
 /** loop mode: rest on the board, then give the next photo its 15s. */
 async function cycle() {
   clearTimeout(cycleTimer);
+  if (menuOnly) return;          // restarted by applyMenuOnly if it comes back
   if (wall.mode !== 'loop' || !queue.length) {
     cycleTimer = setTimeout(cycle, BOARD_REST_MS);
     return;
@@ -1215,7 +1264,7 @@ renderControl();
 renderThumbs();
 poll();
 setInterval(poll, POLL_MS);
-setTimeout(cycle, BOARD_REST_MS);
+cycleTimer = setTimeout(cycle, BOARD_REST_MS);
 </script>
 </body>
 </html>

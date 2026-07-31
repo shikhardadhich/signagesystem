@@ -178,6 +178,46 @@ select:focus {
 
 .field + .field { margin-top: 0.9rem; }
 
+/* A switch and its explanation, for settings that change what a screen shows
+   rather than what it says. The label sits beside the box, not above it as the
+   text fields do — an uppercase caption over a lone checkbox reads as a heading
+   for the whole card. */
+.toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+}
+
+.toggle input[type="checkbox"] {
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0.1rem 0 0;
+  flex: none;
+  accent-color: var(--gold);
+  cursor: pointer;
+}
+
+.toggle__text {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--ink);
+  text-transform: none;
+  letter-spacing: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.toggle .hint { margin: 0.25rem 0 0; }
+
+/* Fields that only matter while the switch is on. Still readable, still
+   editable — greyed out rather than removed, so turning the panel back on
+   doesn't look like it lost the wording that was there. */
+.is-muted {
+  opacity: 0.5;
+  transition: opacity 0.15s ease;
+}
+
 .row2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
