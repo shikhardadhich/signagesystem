@@ -425,6 +425,15 @@ function describeDeltas() {
       continue;
     }
 
+    // Matches what the server does while there is no genuine earlier day:
+    // file the figure as its own yesterday rather than measure it against a
+    // shipped demo number or against this morning's first attempt.
+    if (!baseline.prevDay) {
+      el.className = 'delta delta--none';
+      el.textContent = 'No earlier day yet — the screen shows no change until tomorrow.';
+      continue;
+    }
+
     // Unchanged from what is live: the screen keeps comparing against the
     // figure it already had, so that is the honest thing to show.
     const against = now === was ? prev : was;

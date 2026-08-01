@@ -150,6 +150,13 @@ The two metals are quoted differently because they are shopped for differently:
   same day are treated as corrections that leave the comparison alone, so fixing
   a mistyped digit doesn't look like the price moved twice.
 
+The screen only claims a movement it can stand behind. Until a rate has been
+entered on two different days there is nothing genuine to compare, so it reads
+*no change* — the shipped demo figures are never enrolled as yesterday's
+market, and neither is this morning's first attempt. A rate left alone on a new
+day rolls forward too, rather than leaving yesterday's arrow on the wall
+describing a move that happened the day before.
+
 **Weather is live and needs no key.** [Open-Meteo](https://open-meteo.com) is
 free and keyless, which is the whole reason it is here — a demo nobody can run
 without first signing up for a weather API is a demo that doesn't get run. Name

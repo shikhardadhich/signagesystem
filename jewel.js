@@ -70,7 +70,13 @@ function defaults() {
         { karat: '22K', purity: '91.6%', perGram: 13260, per10Gram: 132600 },
         { karat: '18K', purity: '75.0%', perGram: 10850, per10Gram: 108500 },
       ],
-      silver: { purity: '999', perGram: 91.5, perKg: 73200, prevPerGram: 90.3, prevPerKg: 72240 },
+      /* Yesterday's figures are deliberately equal to today's. A shipped
+         default that claims silver rose ₹1.20 is inventing a movement, and
+         the first real rate anybody types would then be measured against a
+         demo number — "▲ +₹143.50 vs yesterday" is a lie about the market
+         printed at head height in a shop. No change is the honest opening
+         position; a genuine one appears the day after the first real edit. */
+      silver: { purity: '999', perGram: 91.5, perKg: 73200, prevPerGram: 91.5, prevPerKg: 73200 },
     },
     featured: {
       seconds: 8,
@@ -129,6 +135,10 @@ function normalise(input) {
          later would compare today against this morning and print a change
          nobody made. */
       day: str(rates.day, 10) || null,
+      /* And the day the *previous* figures are from. Null means there isn't a
+         genuine earlier day yet — the first rate anybody enters has nothing
+         behind it, and a screen must not manufacture a movement out of that. */
+      prevDay: str(rates.prevDay, 10) || null,
       /* Four is the cap: a fourth line is 14K, and a fifth is a table nobody
          reads from across a shop floor. A row with no karat is a half-filled
          editor row, not a price, so it is dropped rather than printed blank. */
@@ -200,12 +210,36 @@ function today(tz = 'Asia/Kolkata') {
 function rollRates(saved, incoming) {
   const day = today();
   const first = saved.rates.day !== day;
+
+  /* Three states, and the middle one is the one that bit us.
+
+     No stored day at all — nobody has ever entered a rate here, so what is on
+     screen is the shipped demo. A real counter rate measured against that
+     prints a movement nobody made.
+
+     A stored day but no prevDay — a rate has been entered, but only ever on
+     one day, so there is still nothing behind it. Corrections that day must
+     keep filing the figure as its own yesterday rather than treating this
+     morning's first attempt as history.
+
+     Both stored — the ordinary case, and the only one where the comparison
+     means what the screen says it means. */
+  const seeding = !saved.rates.day;
+  const grounded = Boolean(saved.rates.prevDay);
+
   const pick = (was, now, prev) => {
     // Blank means blank. The editor saves the whole document, so an empty box
     // is a decision to drop that line — and a dropped line has nothing to be
     // compared against, so yesterday's figure goes with it.
     if (now === null) return { now: null, prev: null };
-    if (!first || now === was) return { now, prev };
+    // Nothing behind this figure yet: it stands as its own yesterday, on the
+    // day it is first entered and through any corrections that same day.
+    if (seeding || (!grounded && !first)) return { now, prev: now };
+    // Same day: a correction, so the comparison stays where it was.
+    if (!first) return { now, prev };
+    /* A new day rolls the figure back even when it hasn't moved. Skipping the
+       roll on an unchanged rate would leave yesterday's "▼ −₹2" on the wall
+       describing a fall that happened the day before. */
     return { now, prev: was };
   };
 
@@ -216,13 +250,20 @@ function rollRates(saved, incoming) {
   const perKg = pick(ss.perKg, s.perKg, s.prevPerKg ?? ss.prevPerKg);
   const moved = perGram.now !== ss.perGram || perKg.now !== ss.perKg;
 
+  /* On a fresh install only a real edit claims a day. Saving the logo against
+     the shipped demo figures must not enrol them as yesterday's market, or the
+     first rate anybody types tomorrow is measured against invented numbers —
+     which is exactly the "▲ +₹143.50" that started this. Once a genuine figure
+     is on file, any save on a new day rolls it: the rate on the wall was the
+     rate yesterday, whether or not somebody retyped it today. */
   return {
     ...incoming,
     rates: {
       ...incoming.rates,
-      // Only a real change claims the day. Saving the branding alone must not
-      // make tomorrow's first rate edit think it has already happened.
-      day: moved ? day : saved.rates.day,
+      day: seeding ? (moved ? day : null) : day,
+      // The seed day leaves this unset: the day after it is the first day the
+      // screen has anything true to say about the market.
+      prevDay: first && !seeding ? saved.rates.day : saved.rates.prevDay,
       silver: {
         ...incoming.rates.silver,
         perGram: perGram.now, prevPerGram: perGram.prev,
