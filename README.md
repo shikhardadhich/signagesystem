@@ -454,6 +454,15 @@ no configuration.
   filter but a formality.
 
 [mod-free]: https://help.openai.com/en/articles/4936833-is-the-moderation-endpoint-free-to-use
+- **Photos open full size in the moderation page.** A 72px crop is enough to see
+  that a photo exists and nowhere near enough to decide whether it belongs on a
+  wall in a room full of customers — the more so now the phone uploads at full
+  quality. Clicking a thumbnail opens it fitted to the window, clicking again
+  zooms to actual pixels and scrolls. Approve and reject come along into the
+  viewer: a moderator who has to close the photo to act on it ends up deciding
+  from the thumbnail anyway. Arrow keys walk the queue, `A` and `R` decide, `Esc`
+  closes, and deciding on the open photo slides to whatever takes its place
+  rather than closing and making you find your spot again.
 - **Clearing the wall is a two-click action.** *Clear all photos* in the admin
   sidebar arms first and deletes on the second click, disarming itself after 5s.
   It removes the stored images too, not just the records — on every driver. The

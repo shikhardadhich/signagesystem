@@ -186,6 +186,145 @@
     border: 2px solid var(--gold);
     background: var(--cream-deep);
     flex: none;
+    cursor: zoom-in;
+    position: relative;
+    transition: transform var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+  }
+
+  .thumb:hover,
+  .thumb:focus-visible {
+    transform: scale(1.04);
+    box-shadow: var(--shadow-lift);
+    outline: none;
+  }
+
+  /* ---- full-size viewer ----
+
+     A 72px crop is enough to see that a photo exists and nowhere near enough to
+     decide whether it should go on a wall in a room full of customers. The
+     decision buttons come along into the viewer, because a moderator who has to
+     close the photo to act on it ends up judging from the thumbnail again. */
+
+  .viewer {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    background: rgba(16, 10, 5, 0.94);
+    padding: 1rem;
+    gap: 0.75rem;
+  }
+
+  .viewer.hidden { display: none; }
+
+  .viewer__stage {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    place-items: center;
+    position: relative;
+  }
+
+  .viewer__img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: 8px;
+    background: #000;
+    cursor: zoom-in;
+  }
+
+  /* Fills the frame and scrolls instead of fitting: at this point the moderator
+     has decided the fitted view wasn't enough to tell. */
+  .viewer.is-zoomed .viewer__stage {
+    display: block;
+    overflow: auto;
+    place-items: initial;
+  }
+
+  .viewer.is-zoomed .viewer__img {
+    max-width: none;
+    max-height: none;
+    width: auto;
+    cursor: zoom-out;
+    display: block;
+    margin: 0 auto;
+  }
+
+  .viewer__spinner {
+    position: absolute;
+    color: rgba(247, 239, 225, 0.65);
+    font-size: 0.85rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .viewer__bar {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    flex-wrap: wrap;
+    color: var(--cream);
+    flex: none;
+  }
+
+  .viewer__who { min-width: 0; flex: 1; }
+
+  .viewer__name {
+    margin: 0;
+    font-weight: 600;
+    font-size: 1rem;
+  }
+
+  .viewer__message {
+    margin: 0.15rem 0 0;
+    font-size: 0.88rem;
+    color: rgba(247, 239, 225, 0.72);
+    overflow-wrap: anywhere;
+  }
+
+  .viewer__hint {
+    margin: 0.15rem 0 0;
+    font-size: 0.72rem;
+    color: rgba(247, 239, 225, 0.45);
+  }
+
+  .viewer__nav {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+  }
+
+  .viewer__count {
+    font-size: 0.8rem;
+    color: rgba(247, 239, 225, 0.6);
+    min-width: 4.5rem;
+    text-align: center;
+  }
+
+  .viewer .btn {
+    background: rgba(247, 239, 225, 0.1);
+    border-color: rgba(247, 239, 225, 0.28);
+    color: var(--cream);
+  }
+
+  .viewer .btn:hover:not(:disabled) { border-color: var(--gold); }
+  .viewer .btn--approve { background: var(--ok); border-color: var(--ok); color: #fff; }
+  .viewer .btn--reject { background: var(--bad); border-color: var(--bad); color: #fff; }
+
+  .viewer__badge {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 0.35rem 0.8rem;
+    border-radius: 999px;
+    background: rgba(247, 239, 225, 0.12);
+  }
+
+  @media (max-width: 560px) {
+    .viewer__bar { gap: 0.5rem; }
+    .viewer__who { flex-basis: 100%; }
   }
 
   .meta {
@@ -444,6 +583,27 @@
   </aside>
 </main>
 
+<div class="viewer hidden" id="viewer" role="dialog" aria-modal="true" aria-label="Selfie at full size">
+  <div class="viewer__stage" id="viewer-stage">
+    <p class="viewer__spinner hidden" id="viewer-loading">Loading…</p>
+    <img class="viewer__img" id="viewer-img" alt="">
+  </div>
+  <div class="viewer__bar">
+    <div class="viewer__who">
+      <p class="viewer__name" id="viewer-name"></p>
+      <p class="viewer__message" id="viewer-message"></p>
+      <p class="viewer__hint">Click the photo to zoom · ← → to move · Esc to close</p>
+    </div>
+    <div class="viewer__nav">
+      <button class="btn btn--small" type="button" id="viewer-prev" aria-label="Previous photo">←</button>
+      <span class="viewer__count" id="viewer-count"></span>
+      <button class="btn btn--small" type="button" id="viewer-next" aria-label="Next photo">→</button>
+    </div>
+    <div class="viewer__nav" id="viewer-actions"></div>
+    <button class="btn btn--small" type="button" id="viewer-close">Close</button>
+  </div>
+</div>
+
 <script type="module">
 import { shell, api, boot, flash } from '/admin-shell.js';
 
@@ -517,6 +677,9 @@ function counts() {
 function render() {
   renderTabs();
   renderSubmissions();
+  // The viewer is a view of the same list, so it follows every poll and every
+  // decision rather than sitting on a stale copy behind them.
+  if (viewing !== null) paintViewer();
 }
 
 /**
@@ -561,10 +724,13 @@ function renderTabs() {
   }
 }
 
+/** What the current tab is showing, in the order it is shown. */
+const visible = () => submissions.filter((s) => filter === 'all' || s.status === filter);
+
 function renderSubmissions() {
   $('sub-count').textContent = submissions.length;
   const list = $('list');
-  const shown = submissions.filter((s) => filter === 'all' || s.status === filter);
+  const shown = visible();
 
   if (!shown.length) {
     const EMPTY = {
@@ -591,6 +757,14 @@ function renderSubmissions() {
     thumb.src = item.url;
     thumb.loading = 'lazy';
     thumb.alt = `Selfie from ${item.name}`;
+    thumb.tabIndex = 0;
+    thumb.title = 'Click to see it full size';
+    thumb.addEventListener('click', () => openViewer(item.id));
+    // Keyboard-reachable too: moderating a busy queue is a keyboard job, and a
+    // control only the mouse can reach makes it a two-handed one.
+    thumb.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openViewer(item.id); }
+    });
 
     const meta = document.createElement('div');
     meta.className = 'meta';
@@ -715,6 +889,123 @@ async function setWallMode(mode) {
     /* The next poll reconciles. */
   }
   renderWall();
+}
+
+/* ---- full-size viewer ----
+
+   Opened by id rather than by index: the list re-renders under it every few
+   seconds as the queue polls, and an index would silently start pointing at
+   somebody else's photo. */
+
+let viewing = null;
+/* Where the open photo sat in the list, so that deciding on it can fall
+   through to whatever takes its place rather than to the top of the queue. */
+let lastIndex = 0;
+/** The photo currently in the frame, so repaints don't re-fetch it. */
+let shownUrl = null;
+
+function openViewer(id) {
+  viewing = id;
+  $('viewer').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  paintViewer();
+}
+
+function closeViewer() {
+  viewing = null;
+  shownUrl = null;
+  $('viewer').classList.remove('is-zoomed');
+  $('viewer').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+function paintViewer() {
+  const list = visible();
+  const index = list.findIndex((s) => s.id === viewing);
+
+  /* The photo that was open has been filtered away — usually because deciding
+     on it moved it off the Pending tab. Show the next one in its place rather
+     than closing: the moderator is working through a queue, and the whole
+     point of deciding from here is not having to reopen the next photo. */
+  if (index === -1) {
+    if (!list.length) return closeViewer();
+    viewing = list[Math.min(lastIndex, list.length - 1)].id;
+    return paintViewer();
+  }
+  lastIndex = index;
+
+  const item = list[index];
+  const img = $('viewer-img');
+  /* Compared against a remembered value rather than img.src: the browser
+     resolves that to an absolute URL, so it would never equal the relative one
+     in the record and the photo would reload on every six-second poll —
+     flickering under a moderator mid-decision. */
+  if (shownUrl !== item.url) {
+    shownUrl = item.url;
+    $('viewer-loading').classList.remove('hidden');
+    img.addEventListener('load', () => $('viewer-loading').classList.add('hidden'), { once: true });
+    img.addEventListener('error', () => {
+      $('viewer-loading').textContent = 'This photo could not be loaded.';
+    }, { once: true });
+    img.src = item.url;
+    img.alt = `Selfie from ${item.name}`;
+    $('viewer').classList.remove('is-zoomed');
+  }
+
+  $('viewer-name').textContent = item.name;
+  $('viewer-message').textContent = item.message || '—';
+  $('viewer-count').textContent = `${index + 1} of ${list.length}`;
+  $('viewer-prev').disabled = index === 0;
+  $('viewer-next').disabled = index === list.length - 1;
+
+  const actions = $('viewer-actions');
+  actions.replaceChildren();
+  if (item.status === 'pending') {
+    actions.append(
+      button('Approve', 'btn--approve', () => decide(item.id, 'approve')),
+      button('Reject', 'btn--reject', () => decide(item.id, 'reject')),
+    );
+  } else {
+    const badge = document.createElement('span');
+    badge.className = 'viewer__badge';
+    badge.textContent = item.status;
+    actions.append(badge);
+  }
+}
+
+function stepViewer(delta) {
+  const list = visible();
+  const index = list.findIndex((s) => s.id === viewing);
+  const next = list[index + delta];
+  if (!next) return;
+  viewing = next.id;
+  paintViewer();
+}
+
+$('viewer-close').addEventListener('click', closeViewer);
+$('viewer-prev').addEventListener('click', () => stepViewer(-1));
+$('viewer-next').addEventListener('click', () => stepViewer(1));
+$('viewer-img').addEventListener('click', () => $('viewer').classList.toggle('is-zoomed'));
+
+// Clicking the backdrop closes; clicking the photo zooms. Without the target
+// check, every attempt to zoom would shut the thing instead.
+$('viewer').addEventListener('click', (e) => {
+  if (e.target === $('viewer') || e.target === $('viewer-stage')) closeViewer();
+});
+
+window.addEventListener('keydown', (e) => {
+  if (viewing === null) return;
+  if (e.key === 'Escape') closeViewer();
+  else if (e.key === 'ArrowLeft') stepViewer(-1);
+  else if (e.key === 'ArrowRight') stepViewer(1);
+  else if (e.key === 'a' || e.key === 'A') decideVisible('approve');
+  else if (e.key === 'r' || e.key === 'R') decideVisible('reject');
+});
+
+/** Keyboard shortcuts only act on a photo still awaiting a decision. */
+function decideVisible(action) {
+  const item = visible().find((s) => s.id === viewing);
+  if (item && item.status === 'pending') decide(item.id, action);
 }
 
 async function decide(id, action) {
