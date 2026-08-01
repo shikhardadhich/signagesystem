@@ -126,37 +126,25 @@
 
       <h2>Today's rates</h2>
       <p class="hint">
-        Type today's counter rate. Yesterday's figure is kept automatically the
-        first time you save on a new day, and that is what the screen compares
-        against — so you never enter the change by hand. Leave a box empty and
-        the screen drops that line.
+        Type today's counter rate. Leave a box empty and the screen drops that
+        line rather than showing ₹0. Silver carries yesterday's figure forward
+        automatically the first time you save on a new day, and that is what its
+        vs-yesterday line compares against — you never enter a change by hand.
       </p>
 
-      <div class="card">
-        <div class="row2">
-          <div class="field">
-            <label for="f-gold-purity">Gold purity</label>
-            <input id="f-gold-purity" type="text" maxlength="8" placeholder="24K" data-path="rates.gold.purity">
-          </div>
-          <div class="field">
-            <label for="f-updated">Updated at</label>
-            <input id="f-updated" type="text" maxlength="20" placeholder="10:00 AM" data-path="rates.updatedAt">
-          </div>
-        </div>
-        <div class="rate-grid" style="margin-top:0.9rem">
-          <div class="field">
-            <label for="f-gold-gram">Gold — per gram (₹)</label>
-            <input id="f-gold-gram" type="text" inputmode="decimal" data-path="rates.gold.perGram" data-money>
-            <p class="delta" id="d-gold-gram"></p>
-          </div>
-          <div class="field">
-            <label for="f-gold-8">Gold — per 8 grams (₹)</label>
-            <input id="f-gold-8" type="text" inputmode="decimal" data-path="rates.gold.per8Gram" data-money>
-            <p class="delta" id="d-gold-8"></p>
-          </div>
-        </div>
+      <h3 style="font-size:0.95rem;margin:0 0 0.5rem">Gold, by purity</h3>
+      <p class="hint">
+        Gold is quoted by karat rather than by movement — the choice at the
+        counter is 22K against 18K, so the screen shows them side by side with
+        no vs-yesterday line.
+      </p>
+      <div id="karats"></div>
+      <div class="actions-row">
+        <button class="btn" type="button" id="add-karat">Add a purity</button>
+        <span class="hint" style="margin:0" id="karat-count"></span>
       </div>
 
+      <h3 style="font-size:0.95rem;margin:1.5rem 0 0.5rem">Silver</h3>
       <div class="card">
         <div class="row2">
           <div class="field">
@@ -164,9 +152,13 @@
             <input id="f-silver-purity" type="text" maxlength="8" placeholder="999" data-path="rates.silver.purity">
           </div>
           <div class="field">
-            <label for="f-note">Footnote</label>
-            <input id="f-note" type="text" maxlength="80" placeholder="Rates are inclusive of GST" data-path="rates.note">
+            <label for="f-updated">Updated at</label>
+            <input id="f-updated" type="text" maxlength="20" placeholder="10:00 AM" data-path="rates.updatedAt">
           </div>
+        </div>
+        <div class="field" style="margin-top:0.9rem">
+          <label for="f-note">Footnote</label>
+          <input id="f-note" type="text" maxlength="80" placeholder="Rates are inclusive of GST" data-path="rates.note">
         </div>
         <div class="rate-grid" style="margin-top:0.9rem">
           <div class="field">
@@ -403,6 +395,7 @@ function render() {
     onChange: (url) => set('shop.logo', url),
   });
 
+  renderKarats();
   renderPieces();
   renderTrust();
   describeDeltas();
@@ -417,8 +410,6 @@ function render() {
  */
 function describeDeltas() {
   const rows = [
-    ['d-gold-gram', num(config.rates.gold.perGram), baseline.gold.perGram, baseline.gold.prevPerGram],
-    ['d-gold-8', num(config.rates.gold.per8Gram), baseline.gold.per8Gram, baseline.gold.prevPer8Gram],
     ['d-silver-gram', num(config.rates.silver.perGram), baseline.silver.perGram, baseline.silver.prevPerGram],
     ['d-silver-kg', num(config.rates.silver.perKg), baseline.silver.perKg, baseline.silver.prevPerKg],
   ];
@@ -464,6 +455,51 @@ function describeWeather() {
   if (off) $('wx-note').textContent = 'The header shows the rates and the date only.';
   else if (!config.weather.city) $('wx-note').textContent = 'Name a city, or the panel stays hidden.';
   else $('wx-note').textContent = 'Live, refreshed every fifteen minutes.';
+}
+
+/* -------------------------------------------------------------- karats -- */
+
+function renderKarats() {
+  config.rates.gold = config.rates.gold || [];
+  const gold = config.rates.gold;
+  $('karats').replaceChildren(...gold.map((g, i) => {
+    const box = document.createElement('div');
+    box.className = 'piece';
+    box.style.gridTemplateColumns = 'minmax(0, 1fr) auto';
+
+    const fields = document.createElement('div');
+
+    const top = document.createElement('div');
+    top.className = 'row2';
+    top.append(
+      field('Karat', g.karat, 8, (v) => { g.karat = v; markDirty(); }),
+      field('Purity', g.purity, 10, (v) => { g.purity = v; markDirty(); }),
+    );
+
+    const money = document.createElement('div');
+    money.className = 'row2';
+    money.style.marginTop = '0.9rem';
+    money.append(
+      field('Per gram (₹)', g.perGram, 12, (v) => { g.perGram = v.trim() === '' ? null : v; markDirty(); }),
+      field('Per 10 grams (₹)', g.per10Gram, 14, (v) => { g.per10Gram = v.trim() === '' ? null : v; markDirty(); }),
+    );
+
+    fields.append(top, money);
+
+    const order = document.createElement('div');
+    order.className = 'piece__order';
+    order.append(
+      iconButton('↑', i === 0, () => move(gold, i, -1, renderKarats)),
+      iconButton('↓', i === gold.length - 1, () => move(gold, i, 1, renderKarats)),
+      iconButton('✕', false, () => { gold.splice(i, 1); markDirty(); renderKarats(); }),
+    );
+
+    box.append(fields, order);
+    return box;
+  }));
+
+  $('karat-count').textContent = `${gold.length} of 4`;
+  $('add-karat').disabled = gold.length >= 4;
 }
 
 /* -------------------------------------------------------------- pieces -- */
@@ -657,6 +693,12 @@ function renderPicker(host, { value, placeholder, onChange }) {
 }
 
 /* ---------------------------------------------------------------- acts -- */
+
+$('add-karat').addEventListener('click', () => {
+  config.rates.gold.push({ karat: '', purity: '', perGram: null, per10Gram: null });
+  markDirty();
+  renderKarats();
+});
 
 $('add-piece').addEventListener('click', () => {
   config.featured.items.push({ image: '', caption: '' });

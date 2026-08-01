@@ -133,13 +133,22 @@ the landing page. Four things, in the order somebody walking past reads them:
 
 **Rates are typed in, not fetched.** An Indian jeweller's counter rate is their
 own number — set from their supplier and their making charges — so a spot price
-off a metals API would be wrong on the wall by the time anyone looked at it.
-Staff enter today's figure and nothing else: the first save on a new day files
-whatever was showing as yesterday's, and that is what the screen's "▲ +₹120 vs
-yesterday" compares against. Later saves the same day are treated as
-corrections and leave the comparison alone, so fixing a mistyped digit doesn't
-look like the price moved twice. An empty box drops that line from the screen
-rather than showing ₹0.
+off a metals API would be wrong on the wall by the time anyone looked at it. An
+empty box drops that line from the screen rather than showing ₹0.
+
+The two metals are quoted differently because they are shopped for differently:
+
+- **Gold reads across** — a purity table of 24K, 22K and 18K (up to four rows),
+  each with a per-gram and a per-10-gram price. The decision at the counter is
+  22K for a bangle against 18K for a stone setting, and columns are what make
+  two prices comparable at a glance. No vs-yesterday line: it would be three
+  more numbers competing with the comparison that matters.
+- **Silver reads down** — one figure per gram and per kilo, each with what it
+  moved since yesterday. There is only one grade worth quoting, so the movement
+  is the interesting part. Staff type today's figure and nothing else: the first
+  save on a new day files what was showing as yesterday's, and later saves the
+  same day are treated as corrections that leave the comparison alone, so fixing
+  a mistyped digit doesn't look like the price moved twice.
 
 **Weather is live and needs no key.** [Open-Meteo](https://open-meteo.com) is
 free and keyless, which is the whole reason it is here — a demo nobody can run

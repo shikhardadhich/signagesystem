@@ -52,14 +52,24 @@ function defaults() {
     },
     weather: {
       show: true,
-      city: 'Mumbai',
-      region: 'Maharashtra',
+      // Matches the shipped rates, which are Indore's. A demo quoting one
+      // city's gold beside another city's weather invites the question.
+      city: 'Indore',
+      region: 'Madhya Pradesh',
     },
     rates: {
       note: 'Rates are inclusive of GST',
       updatedAt: '10:00 AM',
       day: null,
-      gold: { purity: '24K', perGram: 7240, per8Gram: 57920, prevPerGram: 7120, prevPer8Gram: 56960 },
+      /* Gold is quoted by purity, not by movement. A customer at the counter is
+         choosing between 22K for a bangle and 18K for a stone setting, and the
+         three prices side by side is the comparison they came in to make —
+         which is why this panel carries no "vs yesterday" the way silver does. */
+      gold: [
+        { karat: '24K', purity: '99.9%', perGram: 14465, per10Gram: 144650 },
+        { karat: '22K', purity: '91.6%', perGram: 13260, per10Gram: 132600 },
+        { karat: '18K', purity: '75.0%', perGram: 10850, per10Gram: 108500 },
+      ],
       silver: { purity: '999', perGram: 91.5, perKg: 73200, prevPerGram: 90.3, prevPerKg: 72240 },
     },
     featured: {
@@ -98,7 +108,6 @@ function normalise(input) {
   const c = input && typeof input === 'object' ? input : {};
   const base = defaults();
   const rates = c.rates || {};
-  const gold = rates.gold || {};
   const silver = rates.silver || {};
 
   return {
@@ -120,13 +129,18 @@ function normalise(input) {
          later would compare today against this morning and print a change
          nobody made. */
       day: str(rates.day, 10) || null,
-      gold: {
-        purity: str(gold.purity, 8) || '24K',
-        perGram: money(gold.perGram),
-        per8Gram: money(gold.per8Gram),
-        prevPerGram: money(gold.prevPerGram),
-        prevPer8Gram: money(gold.prevPer8Gram),
-      },
+      /* Four is the cap: a fourth line is 14K, and a fifth is a table nobody
+         reads from across a shop floor. A row with no karat is a half-filled
+         editor row, not a price, so it is dropped rather than printed blank. */
+      gold: (Array.isArray(rates.gold) ? rates.gold : base.rates.gold)
+        .map((g) => ({
+          karat: str(g?.karat, 8),
+          purity: str(g?.purity, 10),
+          perGram: money(g?.perGram),
+          per10Gram: money(g?.per10Gram),
+        }))
+        .filter((g) => g.karat)
+        .slice(0, 4),
       silver: {
         purity: str(silver.purity, 8) || '999',
         perGram: money(silver.perGram),
@@ -173,12 +187,15 @@ function today(tz = 'Asia/Kolkata') {
 }
 
 /**
- * Carries yesterday's figures forward so staff only ever type today's.
+ * Carries yesterday's silver figures forward so staff only ever type today's.
  *
  * The rule is per calendar day, not per save. The first save of a new day files
  * whatever was on the screen as "previous"; every later save that day is a
  * correction and leaves the comparison alone. Shifting on every save would make
  * fixing a mistyped digit look like the price moved twice.
+ *
+ * Gold is not in here: it is quoted by purity rather than by movement, so there
+ * is nothing to carry forward.
  */
 function rollRates(saved, incoming) {
   const day = today();
@@ -192,19 +209,12 @@ function rollRates(saved, incoming) {
     return { now, prev: was };
   };
 
-  const g = incoming.rates.gold;
   const s = incoming.rates.silver;
-  const sg = saved.rates.gold;
   const ss = saved.rates.silver;
 
-  const gPerGram = pick(sg.perGram, g.perGram, g.prevPerGram ?? sg.prevPerGram);
-  const gPer8 = pick(sg.per8Gram, g.per8Gram, g.prevPer8Gram ?? sg.prevPer8Gram);
-  const sPerGram = pick(ss.perGram, s.perGram, s.prevPerGram ?? ss.prevPerGram);
-  const sPerKg = pick(ss.perKg, s.perKg, s.prevPerKg ?? ss.prevPerKg);
-
-  const moved =
-    gPerGram.now !== sg.perGram || gPer8.now !== sg.per8Gram ||
-    sPerGram.now !== ss.perGram || sPerKg.now !== ss.perKg;
+  const perGram = pick(ss.perGram, s.perGram, s.prevPerGram ?? ss.prevPerGram);
+  const perKg = pick(ss.perKg, s.perKg, s.prevPerKg ?? ss.prevPerKg);
+  const moved = perGram.now !== ss.perGram || perKg.now !== ss.perKg;
 
   return {
     ...incoming,
@@ -213,15 +223,10 @@ function rollRates(saved, incoming) {
       // Only a real change claims the day. Saving the branding alone must not
       // make tomorrow's first rate edit think it has already happened.
       day: moved ? day : saved.rates.day,
-      gold: {
-        ...incoming.rates.gold,
-        perGram: gPerGram.now, prevPerGram: gPerGram.prev,
-        per8Gram: gPer8.now, prevPer8Gram: gPer8.prev,
-      },
       silver: {
         ...incoming.rates.silver,
-        perGram: sPerGram.now, prevPerGram: sPerGram.prev,
-        perKg: sPerKg.now, prevPerKg: sPerKg.prev,
+        perGram: perGram.now, prevPerGram: perGram.prev,
+        perKg: perKg.now, prevPerKg: perKg.prev,
       },
     },
   };

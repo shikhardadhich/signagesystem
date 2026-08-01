@@ -255,6 +255,70 @@ html, body {
 
 .rates__group + .rates__group { margin-top: 2vh; }
 
+/* ---- gold, quoted by purity ---- */
+
+/* Three karats, two figures each. A table rather than the silver panel's big
+   single number: the comparison between 22K and 18K is the thing being read,
+   and columns are what make two prices comparable at a glance. */
+.karats {
+  border: 1px solid var(--line-soft);
+  border-radius: 1.2vh;
+  background: rgba(0, 0, 0, 0.32);
+  overflow: hidden;
+}
+
+.karat {
+  display: grid;
+  grid-template-columns: 8.5vh 1fr 1fr;
+  align-items: baseline;
+  gap: 1vh;
+  padding: 1.3vh 1.6vh;
+  border-top: 1px solid var(--line-soft);
+}
+
+.karat:first-child { border-top: 0; }
+
+.karat--head {
+  padding-top: 1vh;
+  padding-bottom: 1vh;
+  background: rgba(201, 151, 63, 0.10);
+}
+
+.karat--head span {
+  font-size: 1.4vh;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: right;
+}
+
+.karat--head span:first-child { text-align: left; }
+
+.karat__k {
+  font-size: 2.4vh;
+  font-weight: 700;
+  color: var(--gold-bright);
+  line-height: 1.1;
+}
+
+.karat__k small {
+  display: block;
+  font-size: 1.3vh;
+  font-weight: 400;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.karat__v {
+  text-align: right;
+  font-size: 2.7vh;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.karat__v.is-blank { color: var(--muted); font-weight: 400; font-size: 2vh; }
+
 .rate {
   display: flex;
   align-items: center;
@@ -570,9 +634,9 @@ html, body {
           <rect x="7.5" y="6" width="9" height="6" rx="1" fill="#f0cd83"/>
         </svg>
         <h3>Gold Rates</h3>
-        <span class="rates__purity" id="gold-purity">(24K)</span>
+        <span class="rates__purity">by purity</span>
       </div>
-      <div class="rates__group" id="gold-rows"></div>
+      <div class="rates__group karats" id="gold-rows"></div>
 
       <div class="rates__head" style="margin-top:2.2vh">
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -683,19 +747,18 @@ function renderDate() {
   $('weekday').textContent = now.toLocaleDateString('en-IN', { weekday: 'long' });
 }
 
-/* Two lines per metal, each with what it moved since yesterday. The delta is
-   the point of the panel: a rate on its own is a number, a rate with "+₹120"
-   beside it is a reason to buy today rather than next week. */
+/* Gold reads across, silver reads down.
+   Gold is a purity table because the choice being made at the counter is 22K
+   against 18K, and columns are what make two prices comparable. Silver is one
+   figure with what it moved since yesterday, because there is only one grade
+   of it worth quoting and the movement is the reason to buy today. */
 function renderRates() {
   const { gold, silver, note, updatedAt } = config.rates;
 
-  $('gold-purity').textContent = gold.purity ? `(${gold.purity})` : '';
   $('silver-purity').textContent = silver.purity ? `(${silver.purity})` : '';
 
-  $('gold-rows').replaceChildren(
-    ...rateRow(gold.perGram, gold.prevPerGram, 'per gram'),
-    ...rateRow(gold.per8Gram, gold.prevPer8Gram, 'per 8 grams'),
-  );
+  $('gold-rows').replaceChildren(karatHead(), ...gold.map(karatRow));
+
   $('silver-rows').replaceChildren(
     ...rateRow(silver.perGram, silver.prevPerGram, 'per gram'),
     ...rateRow(silver.perKg, silver.prevPerKg, 'per kg'),
@@ -704,6 +767,42 @@ function renderRates() {
   const bits = [note, updatedAt && `Updated at ${updatedAt}`].filter(Boolean);
   $('note-text').textContent = bits.join(' • ');
   $('note').style.display = bits.length ? '' : 'none';
+}
+
+function karatHead() {
+  const row = document.createElement('div');
+  row.className = 'karat karat--head';
+  for (const label of ['Purity', 'Per gram', 'Per 10 grams']) {
+    const span = document.createElement('span');
+    span.textContent = label;
+    row.append(span);
+  }
+  return row;
+}
+
+function karatRow(g) {
+  const row = document.createElement('div');
+  row.className = 'karat';
+
+  const k = document.createElement('div');
+  k.className = 'karat__k';
+  k.append(document.createTextNode(g.karat));
+  if (g.purity) {
+    const small = document.createElement('small');
+    small.textContent = g.purity;
+    k.append(small);
+  }
+  row.append(k);
+
+  // A karat with one of its two figures missing still earns its row: 22K at
+  // ₹13,260 a gram and a blank beside it is more use than no 22K line at all.
+  for (const value of [g.perGram, g.per10Gram]) {
+    const cell = document.createElement('div');
+    cell.className = value === null ? 'karat__v is-blank' : 'karat__v';
+    cell.textContent = value === null ? '—' : `₹ ${money(value)}`;
+    row.append(cell);
+  }
+  return row;
 }
 
 /** Returns an array so a blank rate contributes nothing rather than an empty row. */
