@@ -372,35 +372,58 @@ $('message').addEventListener('input', (e) => {
   $('preview-message').style.display = value.trim() ? '' : 'none';
 });
 
-/* ---- image shrinking ----
-   A modern phone camera produces 3-6 MB, while the photo occupies at most about
-   900px on a 4K panel. Downscaling here rather than on the server saves the
-   upload over cafe wifi as well as the storage and bandwidth behind it. */
+/* ---- keeping the photo whole ----
 
-const MAX_EDGE = 1600;
-const JPEG_QUALITY = 0.82;
+   The selfie ends up filling most of a wall-mounted TV, so it is sent exactly
+   as the camera produced it. This page used to downscale every photo to a
+   1600px edge, which was invisible on a 1080p screen and soft on a 4K one —
+   the wrong saving to make on the one image the whole wall is built around.
 
-/** The processed file to submit, or null to fall back to the original input. */
+   The only ceiling left is the server's upload limit, and a photo is reduced
+   solely to get under it. That limit is not arbitrary: the automatic filter
+   inspects the image as a data URL, and an oversized one would be waved
+   through unscreened. Everything that can be uploaded can be checked. */
+
+const LIMIT = 12 * 1024 * 1024;
+/* Steps tried in order until one fits. Full size at near-lossless quality
+   first, so a photo only loses pixels once losing bytes has stopped working. */
+const FALLBACKS = [
+  { edge: Infinity, quality: 0.95 },
+  { edge: Infinity, quality: 0.88 },
+  { edge: 4096, quality: 0.9 },
+  { edge: 3000, quality: 0.88 },
+  { edge: 2200, quality: 0.85 },
+];
+
+/** The processed file to submit, or null to send the original untouched. */
 let prepared = null;
+let reduced = false;
 
 const kb = (n) => (n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`);
 
-async function shrink(file) {
+async function fitToLimit(file) {
+  if (file.size <= LIMIT) return null;                // send it as it came
+
   // imageOrientation honours EXIF, so portrait phone shots aren't rotated.
   const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
-  const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
-  const w = Math.round(bitmap.width * scale);
-  const h = Math.round(bitmap.height * scale);
-
   const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  canvas.getContext('2d').drawImage(bitmap, 0, 0, w, h);
-  bitmap.close?.();
 
-  const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', JPEG_QUALITY));
-  if (!blob || blob.size >= file.size) return null;   // already small enough
-  return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+  try {
+    for (const { edge, quality } of FALLBACKS) {
+      const scale = Math.min(1, edge / Math.max(bitmap.width, bitmap.height));
+      canvas.width = Math.round(bitmap.width * scale);
+      canvas.height = Math.round(bitmap.height * scale);
+      canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+
+      const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', quality));
+      if (blob && blob.size <= LIMIT) {
+        return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+      }
+    }
+    return null;   // nothing fit; let the server say so rather than guessing
+  } finally {
+    bitmap.close?.();
+  }
 }
 
 $('photo').addEventListener('change', async (e) => {
@@ -414,17 +437,20 @@ $('photo').addEventListener('change', async (e) => {
   $('preview-name').textContent = $('name').value.trim() || 'Your name';
 
   prepared = null;
+  reduced = false;
   try {
-    prepared = await shrink(file);
+    prepared = await fitToLimit(file);
+    reduced = Boolean(prepared);
   } catch (err) {
-    // Unsupported format or a browser without createImageBitmap: send as-is.
+    // Unsupported format or a browser without createImageBitmap: send as-is
+    // and let the server's limit have the last word.
   }
 
   const used = prepared || file;
   $('preview-photo').src = URL.createObjectURL(used);
-  $('picker-note').innerHTML = prepared
-    ? `<span class="shrunk">${kb(file.size)} → ${kb(prepared.size)}</span>`
-    : kb(file.size);
+  $('picker-note').innerHTML = reduced
+    ? `<span class="shrunk">${kb(file.size)} → ${kb(used.size)}</span> · trimmed to fit the upload limit`
+    : `${kb(file.size)} · full quality`;
 });
 
 /* ---- submit ---- */

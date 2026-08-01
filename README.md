@@ -214,7 +214,7 @@ another, in parallel. Tuning, all optional:
 | `OPENAI_MODERATION_MODEL` | `omni-moderation-latest` | Must be vision-capable; the older `text-moderation-*` models cannot see photos |
 | `MODERATION_TIMEOUT_MS` | `8000` | How long to wait before letting the upload through unchecked |
 | `MODERATION_THRESHOLD` | unset | `0`-`1`. Unset means the API's own verdict decides. Setting it also blocks any category scoring above it — lower is stricter, and produces more false rejections |
-| `MODERATION_MAX_IMAGE_BYTES` | `6291456` | Photos above this skip the image check rather than stall the upload. The phone already downscales to ~550 KB |
+| `MODERATION_MAX_IMAGE_BYTES` | `12582912` | Photos above this skip the image check. It matches the upload limit on purpose, so nothing that can be uploaded goes unscreened; OpenAI's own ceiling is 20 MB |
 
 The key is server-side only and belongs in `.env` (gitignored) or the host's
 environment — never in the repo. If one leaks, rotate it at
@@ -431,13 +431,19 @@ no configuration.
   mode lives in the store, not the page, so the TV picks it up on its next poll
   and it survives a refresh or a cold start. The screen carries the same control,
   hidden until someone moves the mouse or presses a key (`L` toggles).
-- **Photos are shrunk on the phone before upload.** A modern camera hands over
-  3-6 MB while the photo occupies at most about 900px even on a 4K panel, so the
-  browser downscales to a 1600px long edge and re-encodes as JPEG — a 3.2 MB shot
-  becomes about 550 KB. Doing it client-side saves the upload over cafe wifi as
-  well as the storage and bandwidth behind it, and EXIF orientation is honoured so
-  portrait shots don't end up sideways. If the browser can't do it, the original
-  is sent unchanged.
+- **Photos are uploaded at full quality.** The selfie fills most of a wall-mounted
+  TV, so it is sent exactly as the camera produced it. The phone used to downscale
+  everything to a 1600px edge, which was invisible on a 1080p screen and soft on a
+  4K one — the wrong saving to make on the one image the whole wall is built
+  around. The only remaining ceiling is the 12 MB upload limit, and a photo is
+  re-encoded solely to get under it: full size at near-lossless quality first, so
+  pixels are only lost once losing bytes has stopped working. EXIF orientation is
+  honoured, so portrait shots don't end up sideways.
+
+  That limit is shared with `MODERATION_MAX_IMAGE_BYTES` deliberately. The filter
+  inspects the photo as a data URL, so an image past its cap is waved through
+  unscreened — which is exactly what would have happened here the moment the phone
+  stopped shrinking. Raise the two together or not at all.
 - **Clearing the wall is a two-click action.** *Clear all photos* in the admin
   sidebar arms first and deletes on the second click, disarming itself after 5s.
   It removes the stored images too, not just the records — on every driver. The

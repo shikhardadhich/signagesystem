@@ -28,10 +28,16 @@ const API_KEY = process.env.OPENAI_MODERATION_APIKEY || process.env.OPENAI_API_K
 
 const TIMEOUT_MS = Number(process.env.MODERATION_TIMEOUT_MS || 8000);
 
-/* Base64 inflates by a third, and a phone photo the upload page has already
-   downscaled lands well under this. Anything bigger is not worth the request:
-   skip the image check rather than stall the upload behind a slow POST. */
-const MAX_IMAGE_BYTES = Number(process.env.MODERATION_MAX_IMAGE_BYTES || 6 * 1024 * 1024);
+/* Matches the upload limit in server.js, deliberately: a photo that can be
+   uploaded is a photo that gets screened. This used to sit at 6 MB, below the
+   limit, on the assumption that the phone had already downscaled everything —
+   so when the upload page stopped doing that, full-size photos would have
+   sailed past the filter unchecked and landed on a wall.
+
+   OpenAI's ceiling is 20 MB per image, and base64 inflates by a third, so
+   12 MB of JPEG is a ~16 MB request: comfortably inside it either way the
+   limit is measured. Raise both together or not at all. */
+const MAX_IMAGE_BYTES = Number(process.env.MODERATION_MAX_IMAGE_BYTES || 12 * 1024 * 1024);
 
 /* OpenAI's own `flagged` verdict is the trigger. MODERATION_THRESHOLD (0-1)
    optionally tightens that: any category scoring above it is blocked too,

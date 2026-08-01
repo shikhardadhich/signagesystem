@@ -33,7 +33,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 /* Uploads are held in memory and handed on, so a photo can be refused by the
-   moderation filter before anything touches disk or an object store. */
+   moderation filter before anything touches disk or an object store.
+   The 12 MB cap is shared with moderate.js's MAX_IMAGE_BYTES on purpose —
+   see the note there before changing either. */
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 12 * 1024 * 1024 },
