@@ -169,7 +169,10 @@ let cafeList = [];
 
 const profile = await boot({
   where: 'Cafes',
-  nav: [{ href: '/admin/cafes', label: 'Cafes', ownerOnly: true }],
+  nav: [
+    { href: '/admin/cafes', label: 'Cafes', ownerOnly: true },
+    { href: '/admin/jewel', label: 'Jewellery' },
+  ],
 });
 
 if (profile.role !== 'owner') {

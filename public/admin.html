@@ -622,6 +622,9 @@ await boot({
     { href: `/admin/${cafeId}/board`, label: 'Board' },
     { href: `/${cafeId}`, label: 'Screen ↗', blank: true },
     { href: `/${cafeId}/upload`, label: 'Upload ↗', blank: true },
+    // The other kind of screen this deployment runs. It sits at the end
+    // because it is a different site, not another view of this cafe.
+    { href: '/admin/jewel', label: 'Jewellery' },
   ],
 });
 

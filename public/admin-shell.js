@@ -87,10 +87,18 @@ function renderNav(links) {
 
   for (const link of links) {
     if (link.ownerOnly && shell.profile.role !== 'owner') continue;
+
+    /* href may be a function of the profile, for links that only exist for
+       some people — a staff member's way back to their own cafe has to be
+       built from the cafe they happen to be assigned to, and returning null
+       drops the link rather than pointing it at nothing. */
+    const href = typeof link.href === 'function' ? link.href(shell.profile) : link.href;
+    if (!href) continue;
+
     const a = document.createElement('a');
-    a.href = link.href;
+    a.href = href;
     a.textContent = link.label;
-    if (link.href === location.pathname) a.setAttribute('aria-current', 'page');
+    if (href === location.pathname) a.setAttribute('aria-current', 'page');
     if (link.blank) { a.target = '_blank'; a.rel = 'noopener'; }
     nav.append(a);
   }

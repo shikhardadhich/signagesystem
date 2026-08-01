@@ -296,6 +296,10 @@ await boot({
   where: 'Jewellery screen',
   nav: [
     { href: '/admin/cafes', label: 'Cafes', ownerOnly: true },
+    /* The Cafes link is owner-only, so without this a staff member who
+       followed the jewellery link out of their own cafe would arrive with no
+       way back short of the browser button. */
+    { href: (p) => (p.role !== 'owner' && p.cafeId ? `/admin/${p.cafeId}` : null), label: 'My cafe' },
     { href: '/admin/jewel', label: 'Jewellery' },
     { href: '/jewel', label: 'Screen ↗', blank: true },
   ],
