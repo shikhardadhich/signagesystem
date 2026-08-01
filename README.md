@@ -454,6 +454,14 @@ no configuration.
   filter but a formality.
 
 [mod-free]: https://help.openai.com/en/articles/4936833-is-the-moderation-endpoint-free-to-use
+- **A takeover never appears without its photo.** The name, message and image are
+  set together, and nothing is revealed until the image has actually decoded —
+  the board simply stays up, which is a screen still doing its job rather than a
+  caption floating in an empty frame. This mattered more once photos went to full
+  size: the old six-second wait gave up and showed the takeover anyway, and 6 MB
+  over weak cafe wifi is comfortably past six seconds. A photo that keeps the
+  screen waiting is retried on the next pass and dropped after three attempts, so
+  one bad file can't wedge the wall shut behind it.
 - **Photos open full size in the moderation page.** A 72px crop is enough to see
   that a photo exists and nowhere near enough to decide whether it belongs on a
   wall in a room full of customers — the more so now the phone uploads at full

@@ -1096,7 +1096,7 @@ async function poll() {
 
     if (signature(next) !== signature(queue)) {
       queue = next;
-      for (const item of queue) new Image().src = item.url;   // warm the cache
+      warmNext();
       renderThumbs();
     }
 
@@ -1105,6 +1105,26 @@ async function poll() {
     failures += 1;
     if (failures >= OFFLINE_AFTER) el.offline.classList.remove('hidden');
   }
+}
+
+/* Pulls down the handful of photos about to be needed, so a takeover starts
+   from cache rather than from the network.
+
+   It used to warm every photo in the queue on every change. At 550 KB that was
+   a few megabytes; at full size it is a hundred, fetched all at once and
+   competing for bandwidth with the very photo the next takeover is waiting on
+   — the prewarm meant to prevent a stall causing one. Three ahead is enough at
+   twenty seconds a photo, plus the newest, which is what live mode shows next. */
+const WARM_AHEAD = 3;
+
+function warmNext() {
+  if (!queue.length) return;
+  const wanted = new Set();
+  for (let i = 1; i <= WARM_AHEAD; i += 1) {
+    wanted.add(queue[(index + i) % queue.length].url);
+  }
+  wanted.add(queue[queue.length - 1].url);
+  for (const url of wanted) new Image().src = url;
 }
 
 /* ---- thumbnails ---- */
@@ -1129,23 +1149,47 @@ function renderThumbs() {
 
 /* ---- takeover ---- */
 
-function imageReady(img, timeout = 6000) {
-  if (img.complete && img.naturalWidth) return Promise.resolve();
+/**
+ * Resolves 'loaded', 'error' or 'timeout' — the caller needs to tell them
+ * apart. This used to resolve with nothing after six seconds either way, and
+ * the takeover went ahead regardless: on a slow link that put a name and a
+ * message on a wall-sized screen with an empty frame beside them. Twenty
+ * seconds because photos are now sent at full size, and 6 MB over weak cafe
+ * wifi is comfortably past six.
+ */
+function imageReady(img, timeout = 20000) {
+  if (img.complete && img.naturalWidth) return Promise.resolve('loaded');
   return new Promise((resolve) => {
-    const done = () => {
+    const settle = (how) => () => {
       clearTimeout(timer);
-      img.removeEventListener('load', done);
-      img.removeEventListener('error', done);
-      resolve();
+      img.removeEventListener('load', onLoad);
+      img.removeEventListener('error', onError);
+      resolve(how);
     };
-    const timer = setTimeout(done, timeout);
-    img.addEventListener('load', done, { once: true });
-    img.addEventListener('error', done, { once: true });
-    if (img.decode) img.decode().then(done, () => {});
+    const onLoad = settle('loaded');
+    const onError = settle('error');
+    const timer = setTimeout(settle('timeout'), timeout);
+    img.addEventListener('load', onLoad, { once: true });
+    img.addEventListener('error', onError, { once: true });
+    // decode() resolving is the stronger signal: the pixels are ready to
+    // paint, not merely downloaded.
+    if (img.decode) img.decode().then(onLoad, () => {});
   });
 }
 
-/** Shows one selfie full-screen, then returns to the board. */
+/* How many times a photo has kept the screen waiting. A slow one deserves
+   another go once the cache has caught up; one that never arrives must not
+   hold up everybody behind it, so it is dropped after a few tries. */
+const stalls = new Map();
+const MAX_STALLS = 3;
+
+/**
+ * Shows one selfie full-screen, then returns to the board.
+ *
+ * Returns 'shown', or why it wasn't. Nothing is revealed until the photo has
+ * actually decoded: the board simply stays up, which is a screen still doing
+ * its job rather than a caption floating in an empty frame.
+ */
 async function takeover(item) {
   const token = ++showToken;
 
@@ -1155,24 +1199,34 @@ async function takeover(item) {
   el.shotMessage.textContent = item.message || '';
   el.shotMessage.style.display = item.message ? '' : 'none';
 
-  await imageReady(el.shotImg);
-  if (token !== showToken) return;
+  const state = await imageReady(el.shotImg);
+  if (token !== showToken) return 'superseded';
+
+  if (state !== 'loaded' || !el.shotImg.naturalWidth) {
+    const missed = (stalls.get(item.id) || 0) + 1;
+    // A 404 is not going to fix itself; a slow download might.
+    stalls.set(item.id, state === 'error' ? MAX_STALLS : missed);
+    return state;
+  }
+  stalls.delete(item.id);
 
   // Match the frame to the photo's own shape so nothing is cropped, then let
   // max-width/height shrink it to fit whichever dimension runs out first.
-  const w = el.shotImg.naturalWidth || 4;
-  const h = el.shotImg.naturalHeight || 3;
-  el.shotFrame.style.aspectRatio = `${w} / ${h}`;
+  el.shotFrame.style.aspectRatio = `${el.shotImg.naturalWidth} / ${el.shotImg.naturalHeight}`;
 
   // The board is hidden for the next 15s; a menu page turning behind it would
   // be spent on nobody.
   pauseMenuRotation();
   document.body.classList.add('is-takeover');
   await wait(TAKEOVER_MS);
-  if (token !== showToken) return;
+  if (token !== showToken) return 'shown';
   document.body.classList.remove('is-takeover');
   resumeMenuRotation();
+  return 'shown';
 }
+
+/** Given up on: it has kept the screen waiting too many times. */
+const abandoned = (item) => (stalls.get(item.id) || 0) >= MAX_STALLS;
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -1185,12 +1239,18 @@ async function checkForNewArrival() {
   if (menuOnly) return;
   if (document.body.classList.contains('is-takeover')) return;
   const fresh = queue
-    .filter((s) => (s.decidedAt || 0) > watermark)
+    .filter((s) => (s.decidedAt || 0) > watermark && !abandoned(s))
     .sort((a, b) => a.decidedAt - b.decidedAt);
   if (!fresh.length) return;
+
   const item = fresh[0];
-  watermark = item.decidedAt;
-  await takeover(item);
+  const result = await takeover(item);
+  /* The watermark only moves past a photo that had its moment. A slow one
+     stays in front of the queue and gets another attempt on the next poll,
+     by which time the download it started has usually finished — but only
+     until abandoned() gives up on it, or one bad photo would wedge the wall
+     shut for every one behind it. */
+  if (result === 'shown' || abandoned(item)) watermark = item.decidedAt;
 }
 
 /** loop mode: rest on the board, then give the next photo its 15s. */
@@ -1201,8 +1261,19 @@ async function cycle() {
     cycleTimer = setTimeout(cycle, BOARD_REST_MS);
     return;
   }
-  index = (index + 1) % queue.length;
-  await takeover(queue[index]);
+  /* Walk forward to the next photo worth trying. Bounded by the queue length
+     so a wall where nothing loads rests on the board rather than spinning. */
+  let tries = 0;
+  let result = null;
+  do {
+    index = (index + 1) % queue.length;
+    tries += 1;
+    if (abandoned(queue[index])) continue;
+    result = await takeover(queue[index]);
+  } while (result !== 'shown' && result !== 'superseded' && tries < queue.length);
+
+  // The window has moved on, so fetch what is now coming up.
+  warmNext();
   cycleTimer = setTimeout(cycle, BOARD_REST_MS);
 }
 
