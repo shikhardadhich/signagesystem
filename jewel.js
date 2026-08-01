@@ -110,6 +110,26 @@ function money(v) {
   return Math.round(n * 100) / 100;
 }
 
+/**
+ * Silences a comparison there is no earlier day to justify, on the way out
+ * rather than on the way in.
+ *
+ * Doing it here and not only when saving matters for anything already stored.
+ * A config written before prevDay existed carries whatever "yesterday" figure
+ * it happened to inherit — for the shipped demo, ₹91.50 against a real counter
+ * rate — and correcting that on the next save would leave the wrong number on
+ * a wall until somebody happened to edit it. Read-time makes the fix arrive
+ * with the deploy.
+ */
+function groundSilver(silver, prevDay) {
+  if (prevDay) return silver;
+  return {
+    ...silver,
+    prevPerGram: silver.perGram,
+    prevPerKg: silver.perKg,
+  };
+}
+
 function normalise(input) {
   const c = input && typeof input === 'object' ? input : {};
   const base = defaults();
@@ -151,13 +171,13 @@ function normalise(input) {
         }))
         .filter((g) => g.karat)
         .slice(0, 4),
-      silver: {
+      silver: groundSilver({
         purity: str(silver.purity, 8) || '999',
         perGram: money(silver.perGram),
         perKg: money(silver.perKg),
         prevPerGram: money(silver.prevPerGram),
         prevPerKg: money(silver.prevPerKg),
-      },
+      }, str(rates.prevDay, 10) || null),
     },
     featured: {
       // Below 4s a photograph is a flicker; above 30s the screen looks frozen.
