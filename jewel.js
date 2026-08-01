@@ -308,15 +308,28 @@ async function geocode(city, region) {
 
   const url = 'https://geocoding-api.open-meteo.com/v1/search'
     + `?name=${encodeURIComponent(city)}&count=10&language=en&format=json`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Geocoding failed (${res.status})`);
-  const { results } = await res.json();
+
+  let results;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`the lookup service answered ${res.status}`);
+    ({ results } = await res.json());
+  } catch (err) {
+    // Distinguishable from "no such city", because the fixes are different:
+    // one is a spelling, the other is a firewall or an outage.
+    throw bad(`Couldn't reach the weather service (${err.message}).`, 503);
+  }
   if (!results || !results.length) throw bad(`Couldn't find a place called "${city}".`, 404);
 
-  // Prefer a match in the named region: "Springfield" alone is a coin toss.
+  /* Prefer a match in the named region — "Springfield" alone is a coin toss —
+     but never let a mismatched region veto the city entirely. Open-Meteo names
+     Indian states as it pleases, and a screen showing no weather because
+     somebody wrote "MP" instead of "Madhya Pradesh" is the worse outcome. */
   const wanted = region.trim().toLowerCase();
-  const match = (wanted && results.find((r) => String(r.admin1 || '').toLowerCase() === wanted))
-    || results[0];
+  const match = (wanted && results.find((r) => {
+    const admin = String(r.admin1 || '').toLowerCase();
+    return admin === wanted || admin.includes(wanted) || wanted.includes(admin);
+  })) || results[0];
 
   const value = {
     lat: match.latitude,
@@ -350,25 +363,42 @@ function describeCode(code) {
   return { label: 'Weather', icon: 'cloudy' };
 }
 
-async function weather() {
+/**
+ * @param {object} [where] a city to look up instead of the saved one, so the
+ *   editor can test what has been typed before anyone commits it to a wall.
+ *   A typo is otherwise invisible: the panel just quietly never appears.
+ */
+async function weather(where) {
   const config = await driver.get();
-  if (!config.weather.show || !config.weather.city) return null;
+  const city = where ? String(where.city || '').trim() : config.weather.city;
+  const region = where ? String(where.region || '').trim() : config.weather.region;
+  if (!city) return null;
+  if (!where && !config.weather.show) return null;
 
-  const key = `${config.weather.city}|${config.weather.region}`;
-  if (weatherCache.key === key && Date.now() - weatherCache.at < WEATHER_TTL) {
+  const key = `${city}|${region}`;
+  // A probe from the editor skips the cache: "check this city" that answers
+  // from fifteen minutes ago is not a check.
+  if (!where && weatherCache.key === key && Date.now() - weatherCache.at < WEATHER_TTL) {
     return weatherCache.value;
   }
 
-  const place = await geocode(config.weather.city, config.weather.region);
+  const place = await geocode(city, region);
   const url = 'https://api.open-meteo.com/v1/forecast'
     + `?latitude=${place.lat}&longitude=${place.lon}`
     + '&current=temperature_2m,weather_code'
     + '&daily=temperature_2m_max,temperature_2m_min'
     + `&timezone=${encodeURIComponent(place.timezone)}&forecast_days=1`;
 
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Weather lookup failed (${res.status})`);
-  const data = await res.json();
+  let data;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`the forecast service answered ${res.status}`);
+    data = await res.json();
+  } catch (err) {
+    // Wrapped like the geocode call above: a cached place means this is the
+    // only request that runs, so it has to explain itself just as clearly.
+    throw bad(`Couldn't reach the weather service (${err.message}).`, 503);
+  }
 
   const round = (v) => (Number.isFinite(v) ? Math.round(v) : null);
   const value = {
@@ -380,7 +410,9 @@ async function weather() {
     at: Date.now(),
   };
 
-  weatherCache = { key, at: Date.now(), value };
+  // A probe must not seed the cache the screen reads: someone typing a city
+  // they then decide against would leave it on the wall for a quarter hour.
+  if (!where) weatherCache = { key, at: Date.now(), value };
   return value;
 }
 

@@ -417,13 +417,21 @@ app.get('/api/jewel', async (req, res, next) => {
 
 /* Weather is fetched here rather than in the browser: the screen is a kiosk
    that may sit behind a filtered network, and one server-side call every
-   fifteen minutes serves every screen in the shop. A failure is a 200 with a
-   null body — the panel disappears and the rates stay up, which is the right
-   trade when the weather is the least important thing on the wall. */
-app.get('/api/jewel/weather', async (req, res) => {
+   fifteen minutes serves every screen in the shop.
+
+   For the screen, a failure is a 200 with a null body — the panel disappears
+   and the rates stay up, which is the right trade when the weather is the
+   least important thing on the wall. For the editor's "check this city", the
+   same silence would be useless, so ?city= reports what actually went wrong
+   and tests what has been typed rather than what was last saved. */
+app.get('/api/jewel/weather', async (req, res, next) => {
+  const probe = req.query.city ? { city: req.query.city, region: req.query.region || '' } : null;
   try {
-    res.json(await jewel.weather());
+    const wx = await jewel.weather(probe);
+    if (probe && !wx) return res.status(404).json({ error: 'Name a city to look up.' });
+    res.json(wx);
   } catch (err) {
+    if (probe) return next(err);
     res.json(null);
   }
 });

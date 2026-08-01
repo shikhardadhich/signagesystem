@@ -737,7 +737,19 @@ function render() {
   renderRates();
   renderTrust();
   startRotation();
+
+  /* Weather refreshes on its own quarter-hour timer, which is right for the
+     temperature and wrong for the city: someone who has just changed it in the
+     admin is standing in front of the screen waiting to see it. A changed city
+     re-asks immediately. */
+  const where = `${c.weather.show}|${c.weather.city}|${c.weather.region}`;
+  if (where !== lastWhere) {
+    lastWhere = where;
+    loadWeather();
+  }
 }
+
+let lastWhere = null;
 
 function renderDate() {
   const now = new Date();
@@ -985,10 +997,10 @@ async function loadQr() {
 
 /* ----------------------------------------------------------------- boot -- */
 
+// The first weather call comes from render(), which knows which city to ask
+// about; this only keeps it current afterwards.
 loadConfig().then(loadQr);
 setInterval(loadConfig, CONFIG_POLL_MS);
-
-loadWeather();
 setInterval(loadWeather, WEATHER_POLL_MS);
 
 // Past midnight the date in the header would otherwise be yesterday's until

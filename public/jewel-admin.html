@@ -385,6 +385,9 @@ function render() {
         describeRotation();
       } else {
         set(input.dataset.path, input.value);
+        // Retyping the city retires whatever the last check reported, which
+        // otherwise sits there describing a city no longer in the box.
+        if (input.dataset.path.startsWith('weather.')) describeWeather();
       }
     };
   }
@@ -716,13 +719,20 @@ $('add-trust').addEventListener('click', () => {
    otherwise invisible: the panel just quietly never appears. */
 $('wx-check').addEventListener('click', async () => {
   const btn = $('wx-check');
+  const city = (config.weather.city || '').trim();
+  if (!city) return flash('Name a city first.', 'bad');
+
   btn.disabled = true;
   btn.textContent = 'Checking…';
   try {
-    const wx = await api('/api/jewel/weather');
-    if (!wx) throw new Error('No weather came back for that city. Check the spelling, or save first — the lookup uses the saved city.');
-    flash(`${wx.place}: ${wx.now}°C, ${wx.label.toLowerCase()}.`);
+    // The typed city, not the saved one: checking after saving is a check that
+    // arrives too late to be worth having.
+    const q = `city=${encodeURIComponent(city)}&region=${encodeURIComponent(config.weather.region || '')}`;
+    const wx = await api(`/api/jewel/weather?${q}`);
+    $('wx-note').textContent = `${wx.place} — ${wx.now}°C, ${wx.label.toLowerCase()}, high ${wx.high}° low ${wx.low}°.`;
+    flash(`Found ${wx.place}.`);
   } catch (err) {
+    $('wx-note').textContent = err.message;
     flash(err.message, 'bad');
   } finally {
     btn.disabled = false;
