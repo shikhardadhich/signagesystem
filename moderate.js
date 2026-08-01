@@ -36,7 +36,16 @@ const TIMEOUT_MS = Number(process.env.MODERATION_TIMEOUT_MS || 8000);
 
    OpenAI's ceiling is 20 MB per image, and base64 inflates by a third, so
    12 MB of JPEG is a ~16 MB request: comfortably inside it either way the
-   limit is measured. Raise both together or not at all. */
+   limit is measured. Raise both together or not at all.
+
+   The photo is sent whole rather than downscaled for the check, which is worth
+   explaining because the opposite looks obviously cheaper. It isn't: the
+   moderation endpoint is free, and the model downsamples internally anyway, so
+   a smaller copy would buy a second or two of latency and nothing else. What
+   it would cost is either a native image dependency on the server, or trusting
+   the phone to make the copy — and a client that supplies both the copy and
+   the original can send a clean thumbnail with anything at all behind it,
+   which is not a filter, it is a formality. */
 const MAX_IMAGE_BYTES = Number(process.env.MODERATION_MAX_IMAGE_BYTES || 12 * 1024 * 1024);
 
 /* OpenAI's own `flagged` verdict is the trigger. MODERATION_THRESHOLD (0-1)

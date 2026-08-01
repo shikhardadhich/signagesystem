@@ -444,6 +444,16 @@ no configuration.
   inspects the photo as a data URL, so an image past its cap is waved through
   unscreened — which is exactly what would have happened here the moment the phone
   stopped shrinking. Raise the two together or not at all.
+
+  The full photo goes to the filter rather than a downscaled copy, which looks
+  wasteful and isn't. The moderation endpoint is [free][mod-free] and the model
+  downsamples internally, so a smaller copy would buy a second of latency and
+  nothing else — while costing either a native image dependency on the server or
+  trusting the phone to produce the copy. A client that supplies both the copy and
+  the original can send a clean thumbnail with anything behind it, which is not a
+  filter but a formality.
+
+[mod-free]: https://help.openai.com/en/articles/4936833-is-the-moderation-endpoint-free-to-use
 - **Clearing the wall is a two-click action.** *Clear all photos* in the admin
   sidebar arms first and deletes on the second click, disarming itself after 5s.
   It removes the stored images too, not just the records — on every driver. The
