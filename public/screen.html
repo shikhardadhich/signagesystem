@@ -1047,6 +1047,9 @@ function applyMenuOnly(on) {
     // showToken makes the running one bow out at its next checkpoint.
     showToken += 1;
     clearTimeout(cycleTimer);
+    // No panel means no code on screen; minting fresh passes for nobody to
+    // scan would be a request a minute for the life of the deployment.
+    clearTimeout(qrTimer);
     document.body.classList.remove('is-takeover');
     resumeMenuRotation();
     el.control.classList.remove('is-visible');
@@ -1060,16 +1063,33 @@ function applyMenuOnly(on) {
 /* ---- QR ---- */
 
 /* Fetched on demand rather than at load: generating a code for a screen that
-   never shows one is pure waste, and the board tells us which this is. */
-let qrLoaded = false;
+   never shows one is pure waste, and the board tells us which this is.
+
+   Then re-fetched on a timer, which is the whole point of the exercise. The
+   code carries a pass that expires, so a customer who photographs the screen
+   instead of scanning it is holding a code that stops working about a minute
+   after they walk away. Leaving one code up all day would put the expiry in
+   the token and change nothing. */
+const QR_REFRESH_MS = 60000;
+let qrTimer = null;
 
 function loadQr() {
-  if (qrLoaded) return;
-  qrLoaded = true;
   fetch(at('/qr'))
     .then((r) => r.json())
-    .then(({ dataUrl }) => { $('qr-img').src = dataUrl; })
-    .catch(() => { qrLoaded = false; });
+    .then(({ dataUrl, ttlMs }) => {
+      $('qr-img').src = dataUrl;
+      clearTimeout(qrTimer);
+      /* Well inside the pass's own lifetime, so whoever scans the code on
+         screen always has most of the window left to type a message and take
+         a photo they like. A refresh timed to the expiry would hand somebody
+         a code with two seconds on it. */
+      if (ttlMs) qrTimer = setTimeout(loadQr, Math.min(QR_REFRESH_MS, ttlMs / 3));
+    })
+    .catch(() => {
+      // Keep the code that is up rather than blanking the panel, and try again.
+      clearTimeout(qrTimer);
+      qrTimer = setTimeout(loadQr, 10000);
+    });
 }
 
 /* ---- polling ---- */

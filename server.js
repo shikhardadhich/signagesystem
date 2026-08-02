@@ -26,6 +26,7 @@ const QRCode = require('qrcode');
 const store = require('./store');
 const cafes = require('./cafes');
 const jewel = require('./jewel');
+const pass = require('./pass');
 const auth = require('./auth');
 const moderation = require('./moderate');
 
@@ -214,11 +215,28 @@ app.get('/api/cafes/:cafeId/board', loadCafe, async (req, res, next) => {
 
 app.post('/api/cafes/:cafeId/upload', loadCafe, upload.single('photo'), async (req, res, next) => {
   try {
+    /* Checked before anything else is looked at, including the photo: an
+       expired pass means this upload should not be happening at all, and
+       there is no sense moderating a picture that is going to be refused. */
+    const why = pass.check(req.params.cafeId, req.body.pass);
+    if (why) return res.status(403).json({ error: pass.reason(why), pass: why });
+
     if (!req.file) return res.status(400).json({ error: 'A photo is required' });
 
     const name = String(req.body.name || '').trim().slice(0, 40);
     const message = String(req.body.message || '').trim().slice(0, 100);
     if (!name) return res.status(400).json({ error: 'A name is required' });
+
+    /* Enforced here and not only by the checkbox. A ticked box in a form is a
+       claim the page makes; anything that skips the page — a script, a replayed
+       request — would otherwise put someone's face on a public screen with no
+       agreement behind it at all. */
+    if (String(req.body.consent) !== 'yes') {
+      return res.status(400).json({
+        error: 'Please agree to the terms before sending your selfie.',
+        field: 'consent',
+      });
+    }
 
     /* Before store.add, not after: a flagged photo is refused while it is
        still only a buffer in memory, so it is never written anywhere. */
@@ -284,15 +302,19 @@ app.get('/api/cafes/:cafeId/status/:id', loadCafe, async (req, res, next) => {
   }
 });
 
+/* The QR carries a pass that expires, so the screen has to be asked for a new
+   code every minute or so — see pass.js. `ttl` comes back with it so the screen
+   knows how often to ask without the interval being written down twice. */
 app.get('/api/cafes/:cafeId/qr', loadCafe, async (req, res, next) => {
   try {
-    const target = `${publicBase(req)}/${req.params.cafeId}/upload`;
+    const query = pass.enabled ? `?p=${encodeURIComponent(pass.issue(req.params.cafeId))}` : '';
+    const target = `${publicBase(req)}/${req.params.cafeId}/upload${query}`;
     const dataUrl = await QRCode.toDataURL(target, {
       width: 512,
       margin: 1,
       color: { dark: '#3B2415', light: '#FFFFFF' },
     });
-    res.json({ dataUrl, target });
+    res.json({ dataUrl, target, ttlMs: pass.enabled ? pass.TTL_MS : null });
   } catch (err) {
     next(err);
   }
@@ -530,6 +552,7 @@ app.get('/api/health', async (req, res) => {
     cafes: cafes.driver,
     auth: { enabled: auth.enabled, detail: auth.describe() },
     moderation: { enabled: moderation.enabled, detail: moderation.describe() },
+    uploadPasses: { enabled: pass.enabled, detail: pass.describe() },
   });
 });
 

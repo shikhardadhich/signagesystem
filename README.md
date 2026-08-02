@@ -174,6 +174,36 @@ Nothing here is per-cafe: there is one jewellery screen, because it exists to be
 shown from the landing page. It keeps its config in the `settings` table
 alongside the wall modes, so an existing database needs no migration.
 
+## Uploads come from people in the room
+
+Three things stand between the screen and a stranger's photo library.
+
+**The QR code expires.** It encodes a signed pass with a few minutes on it, and
+the screen mints a fresh one every minute — so somebody who photographs the
+code on their way past is holding something that stops working before they
+reach the car park. Both halves matter: the expiry has to be *in* the code or
+there is nothing to go stale, and the signature has to be checked by the server,
+because a timestamp the page validates is a timestamp the person can edit. The
+upload page shows a countdown and stops asking for a photo once it hits zero,
+but that is a courtesy — `pass.js` is what refuses the upload.
+
+Set `QR_SECRET` before deploying. Without it the pass is signed with a key
+generated at boot, which is fine on one machine and wrong on a host running
+several instances: they would disagree about what they had signed and refuse
+uploads at random. `QR_PASSES=off` restores links that never expire.
+
+**The picker opens the front camera.** `capture="user"` on the file input, which
+on a phone means the camera comes up facing the person and the photo library is
+not offered — so the easy path to putting somebody else's face on the wall is
+closed. It is a request, not a guarantee: the phone's own camera app still has a
+flip button and a pinch zoom, and a laptop ignores the hint entirely. Closing
+those needs an in-page camera rather than a file input.
+
+**Consent is a checkbox, not small print.** Unticked, sitting between the person
+and the button, and checked again on the server — because a ticked box is a claim
+the page makes, and anything that skips the page would otherwise put a face on a
+public screen with no agreement behind it at all.
+
 ## Automatic moderation
 
 A selfie wall in a public room is a screen strangers can write on. Every upload
@@ -521,6 +551,7 @@ never leaves anything behind.
 ```
 server.js          Express app and routes (exports the app; listens only via npm start)
 store.js           selfie storage drivers: local disk, Supabase, Firebase, or Vercel Blob
+pass.js            signed, expiring passes for the upload page
 cafes.js           cafes and their menu boards
 jewel.js           the jewellery screen: rates, weather, featured pieces
 assets.js          board image storage: Supabase, Vercel Blob, or local disk
