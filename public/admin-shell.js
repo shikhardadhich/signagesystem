@@ -68,7 +68,9 @@ export async function boot({ where = '', nav = [] } = {}) {
   shell.cafeId = cafeIdFromPath();
 
   if ($('shell-where')) $('shell-where').textContent = where;
+  markVertical();
   renderNav(nav);
+  trackHeaderHeight();
 
   if (!me.authEnabled) {
     document.body.prepend(banner(
@@ -78,6 +80,45 @@ export async function boot({ where = '', nav = [] } = {}) {
   }
 
   return shell.profile;
+}
+
+/**
+ * Tells the stylesheet which kind of screen this page edits, which is the only
+ * thing that changes colour between them.
+ *
+ * Read from the path rather than passed in by each page: the URL already knows,
+ * and a fifth page added later gets the right accent without anyone
+ * remembering to declare it. The owner console and sign-in belong to no
+ * particular screen, so they keep the neutral default.
+ */
+function markVertical() {
+  const path = location.pathname;
+  const vertical = path.startsWith('/admin/jewel') ? 'jewel'
+    : /^\/admin\/[^/]+/.test(path) && !path.startsWith('/admin/cafes') ? 'cafe'
+    : 'core';
+  document.body.dataset.vertical = vertical;
+}
+
+/**
+ * Publishes the header's height as --top-h, so anything sticky can sit below
+ * it instead of underneath it.
+ *
+ * Measured rather than hardcoded because the header is not one height: it
+ * grows a second row on a phone, and shrinks again when the nav has two links
+ * instead of six. A guessed number is right on one device and wrong on the
+ * rest, which shows up as a heading half-hidden behind the bar.
+ */
+function trackHeaderHeight() {
+  const top = document.querySelector('.top');
+  if (!top) return;
+
+  const publish = () => {
+    document.documentElement.style.setProperty('--top-h', `${Math.round(top.offsetHeight)}px`);
+  };
+  publish();
+
+  if (window.ResizeObserver) new ResizeObserver(publish).observe(top);
+  else window.addEventListener('resize', publish);
 }
 
 function renderNav(links) {

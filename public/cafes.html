@@ -23,11 +23,11 @@
   }
 
   .cafe__name {
-    font-family: var(--serif);
-    font-size: 1.15rem;
-    font-weight: 700;
-    color: var(--coffee);
+    font-size: 1.02rem;
+    font-weight: 600;
+    color: var(--ink);
     margin: 0;
+    letter-spacing: -0.01em;
   }
 
   .cafe__url {
@@ -55,8 +55,20 @@
 
   /* ---- staff table ---- */
 
-  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-  th, td { text-align: left; padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--line); }
+  /* The accounts table is the one thing here that cannot shrink: five columns
+     of names, emails and roles. Rather than crushing them, the table scrolls
+     sideways inside its card — a scroll is honest, a 40px-wide email column is
+     not. The card clips it so the page itself never scrolls sideways. */
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 -0.25rem;
+    padding: 0 0.25rem;
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; min-width: 520px; }
+  th, td { text-align: left; padding: 0.6rem; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td:first-child, th:first-child { white-space: normal; }
   th { font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--caramel); }
   td select { font-size: 0.85rem; padding: 0.3rem 0.4rem; }
   .you { color: var(--ink-soft); font-size: 0.78rem; }
@@ -116,10 +128,12 @@
     </p>
 
     <div class="card">
-      <table>
-        <thead><tr><th>Email</th><th>Role</th><th>Cafe</th><th></th></tr></thead>
-        <tbody id="user-rows"></tbody>
-      </table>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Email</th><th>Role</th><th>Cafe</th><th></th></tr></thead>
+          <tbody id="user-rows"></tbody>
+        </table>
+      </div>
       <p class="empty hidden" id="user-empty">No accounts yet.</p>
     </div>
 

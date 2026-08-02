@@ -1,114 +1,254 @@
 /**
- * Shared chrome for the signed-in pages: sign-in, the cafe picker, moderation
- * and the board editor.
+ * Shared chrome for the signed-in pages: sign-in, the cafe picker, moderation,
+ * the board editor and the jewellery editor.
  *
- * These four pages are one tool, so the header, cards, forms and buttons live
- * here rather than being pasted into each file — a change to a button is one
- * edit, and the pages cannot drift apart visually.
+ * These pages are one tool, so the header, cards, forms and buttons live here
+ * rather than being pasted into each file — a change to a button is one edit,
+ * and the pages cannot drift apart visually.
  *
- * theme.css owns the palette; this file only arranges it.
+ * ---- why this doesn't look like the screens it manages ----
+ *
+ * The admin used to wear the cafe's cream and gold. That was fine while a cafe
+ * was the only thing it managed; it stopped being fine the day the same tool
+ * started editing a jeweller's rate board, because the chrome was making a
+ * claim about the content that was no longer true. Staff software should read
+ * as an instrument — quiet, dense, legible under bad lighting at the end of a
+ * shift — and leave the theming to the thing on the wall.
+ *
+ * So: neutral surfaces, one accent, and the accent is the only part that
+ * changes. `data-vertical` on <body> (set in admin-shell.js) picks it, which is
+ * how somebody with four tabs open can tell at a glance which screen they are
+ * about to edit.
+ *
+ * theme.css still supplies the token *names* — this file redefines their values
+ * for these pages only, so every page-level rule that already says
+ * `var(--line)` follows along without being touched.
  */
 
+:root {
+  /* ---- surfaces ---- */
+  --page: #f4f6f8;
+  --page-deep: #eceff3;
+  --card: #ffffff;
+  --card-sunk: #f7f9fb;
+  --line: #dfe4ea;
+  --line-strong: #c6cdd6;
+
+  /* ---- type ---- */
+  --ink: #16202b;
+  --ink-soft: #55606d;
+  /* 4.6:1 on white rather than the 3.6:1 a lighter grey would give. Empty
+     states and timestamps are still text somebody has to read, sometimes on a
+     phone under a counter light. */
+  --muted: #6c7683;
+
+  /* Names inherited from the cafe palette, remapped to slate. Page-level CSS
+     across four files refers to these; renaming them would be a rewrite for
+     no gain, so they keep their names and lose their warmth. */
+  --espresso: #111a24;
+  --coffee: #1e2a37;
+  --mocha: #33414f;
+  --caramel: #667486;
+  --cream: #f8fafc;
+  --cream-deep: #e7ecf1;
+
+  /* ---- accent, per vertical ---- */
+  /* Slate by default: the owner console and sign-in belong to no one screen. */
+  --accent: #3f5871;
+  --accent-ink: #2c4359;
+  --accent-soft: rgba(63, 88, 113, 0.12);
+  --accent-line: rgba(63, 88, 113, 0.4);
+  --on-accent: #ffffff;
+
+  /* theme.css names these; page CSS uses them for focus rings and highlights. */
+  --gold: var(--accent);
+  --gold-light: var(--accent);
+  --gold-deep: var(--accent-ink);
+
+  --ok: #1f7a4d;
+  --ok-soft: rgba(31, 122, 77, 0.12);
+  --bad: #b3402c;
+  --bad-soft: rgba(179, 64, 44, 0.1);
+  --warn: #8a5a10;
+  --warn-soft: rgba(138, 90, 16, 0.12);
+
+  --shadow-card: 0 1px 2px rgba(16, 32, 48, 0.05), 0 1px 3px rgba(16, 32, 48, 0.04);
+  --shadow-lift: 0 4px 10px rgba(16, 32, 48, 0.08), 0 12px 28px rgba(16, 32, 48, 0.10);
+
+  --r-sm: 7px;
+  --r-md: 11px;
+  --r-lg: 15px;
+}
+
+/* A cafe's pages carry the amber its screens do; the jeweller's carry indigo.
+   Only the accent moves — the surfaces stay identical, so the difference reads
+   as a label rather than as a different application. */
+body[data-vertical="cafe"] {
+  --accent: #9a6412;
+  --accent-ink: #7d5210;
+  --accent-soft: rgba(154, 100, 18, 0.12);
+  --accent-line: rgba(154, 100, 18, 0.4);
+}
+
+body[data-vertical="jewel"] {
+  --accent: #4a45c4;
+  --accent-ink: #3b37a0;
+  --accent-soft: rgba(74, 69, 196, 0.1);
+  --accent-line: rgba(74, 69, 196, 0.38);
+}
+
 body {
-  background: linear-gradient(180deg, #fdf8ef 0%, var(--cream) 100%);
+  background: var(--page);
   min-height: 100vh;
   color: var(--ink);
+  font-family: var(--sans);
+  /* Steadier than the browser default at small sizes, which is most of this UI. */
+  line-height: 1.55;
+}
+
+/* Reachable by keyboard and visible when it is. The old outline was gold on
+   cream and all but invisible; a shift-worker tabbing through a queue needs to
+   see where they are. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
 }
 
 /* ------------------------------------------------------------- header -- */
 
 .top {
-  background: linear-gradient(180deg, var(--coffee) 0%, var(--espresso) 100%);
+  background: var(--espresso);
   color: var(--cream);
-  border-bottom: 3px solid var(--gold);
+  border-bottom: 1px solid #000;
+  /* Follows the page down: on a phone the queue is long, and the way out of a
+     cafe you opened by mistake shouldn't be a scroll to the top. */
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+/* The accent's one appearance in the chrome, and the reason it is here: a hair
+   of colour along the top says which kind of screen this tab is editing
+   without a word being spent on it. */
+.top::after {
+  content: "";
+  display: block;
+  height: 3px;
+  background: var(--accent);
 }
 
 .top__inner {
-  max-width: 1100px;
+  max-width: 1180px;
   margin: 0 auto;
-  padding: 1rem 1.5rem;
+  padding: 0.85rem 1.5rem;
   display: flex;
   flex-wrap: wrap;
-  gap: var(--s4);
+  gap: 0.75rem 1.25rem;
   align-items: center;
   justify-content: space-between;
 }
 
 .top__brand {
-  font-family: var(--serif);
-  font-size: 1.35rem;
+  font-family: var(--sans);
+  font-size: 1.02rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   margin: 0;
   display: flex;
   align-items: baseline;
-  gap: 0.5rem;
+  gap: 0.55rem;
+  min-width: 0;
 }
 
 .top__brand em {
-  color: var(--gold-light);
+  color: #fff;
   font-style: normal;
 }
 
 .top__where {
   font-family: var(--sans);
-  font-size: 0.72rem;
-  letter-spacing: 0.16em;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--gold);
+  color: rgba(248, 250, 252, 0.62);
+  white-space: nowrap;
 }
 
 .top__nav {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 1.1rem;
+  gap: 0.35rem;
   font-size: 0.85rem;
+  /* Scrolls rather than wraps to a second and third line: on a phone, six
+     links stacked push the actual page below the fold. */
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  max-width: 100%;
 }
+
+.top__nav::-webkit-scrollbar { display: none; }
 
 .top__nav a {
-  color: var(--gold-light);
+  color: rgba(248, 250, 252, 0.72);
   text-decoration: none;
-  border-bottom: 1px solid transparent;
-  padding-bottom: 1px;
+  padding: 0.4rem 0.7rem;
+  border-radius: var(--r-sm);
+  white-space: nowrap;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
 }
 
-.top__nav a:hover,
+.top__nav a:hover {
+  background: rgba(248, 250, 252, 0.1);
+  color: #fff;
+}
+
 .top__nav a[aria-current="page"] {
-  border-bottom-color: var(--gold-light);
+  background: rgba(248, 250, 252, 0.14);
+  color: #fff;
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 
 .top__who {
-  color: rgba(247, 239, 225, 0.6);
-  font-size: 0.78rem;
+  color: rgba(248, 250, 252, 0.5);
+  font-size: 0.76rem;
+  white-space: nowrap;
+  margin-left: auto;
 }
 
 .top__out {
   font: inherit;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   background: none;
-  border: 1px solid rgba(230, 193, 121, 0.5);
-  color: var(--gold-light);
-  border-radius: var(--r-pill);
-  padding: 0.25rem 0.8rem;
+  border: 1px solid rgba(248, 250, 252, 0.28);
+  color: rgba(248, 250, 252, 0.85);
+  border-radius: var(--r-sm);
+  padding: 0.35rem 0.8rem;
   cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--fast) var(--ease);
 }
 
-.top__out:hover {
-  background: rgba(230, 193, 121, 0.14);
-}
+.top__out:hover { background: rgba(248, 250, 252, 0.12); }
 
 /* --------------------------------------------------------------- shell -- */
 
 .wrap {
-  max-width: 1100px;
+  max-width: 1180px;
   margin: 0 auto;
-  padding: 1.75rem 1.5rem 4rem;
+  padding: 1.6rem 1.5rem 5rem;
 }
 
 h2 {
-  font-family: var(--serif);
-  font-size: 1.15rem;
-  margin: 0 0 0.9rem;
-  color: var(--coffee);
+  font-family: var(--sans);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  margin: 0 0 0.75rem;
+  color: var(--caramel);
   display: flex;
   align-items: center;
   gap: 0.6rem;
@@ -116,10 +256,10 @@ h2 {
 
 .hint {
   color: var(--ink-soft);
-  font-size: 0.85rem;
-  line-height: 1.5;
+  font-size: 0.86rem;
+  line-height: 1.6;
   margin: 0 0 var(--s5);
-  max-width: 62ch;
+  max-width: 68ch;
 }
 
 .card {
@@ -134,7 +274,6 @@ h2 {
 .empty {
   color: var(--muted);
   font-size: 0.9rem;
-  font-style: italic;
   margin: 0;
 }
 
@@ -146,7 +285,7 @@ label,
 .label {
   display: block;
   font-size: 0.72rem;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--caramel);
   margin: 0 0 0.35rem;
@@ -156,24 +295,30 @@ label,
 input[type="text"],
 input[type="email"],
 input[type="password"],
+input[type="number"],
 textarea,
 select {
   width: 100%;
   font: inherit;
   font-size: 0.95rem;
-  padding: 0.6rem 0.7rem;
+  padding: 0.62rem 0.72rem;
   border-radius: var(--r-sm);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   background: #fff;
   color: var(--ink);
+  transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
 }
+
+input:hover:not(:disabled),
+select:hover:not(:disabled),
+textarea:hover:not(:disabled) { border-color: var(--caramel); }
 
 input:focus,
 textarea:focus,
 select:focus {
-  outline: 2px solid var(--gold);
-  outline-offset: 1px;
-  border-color: var(--gold);
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .field + .field { margin-top: 0.9rem; }
@@ -191,9 +336,9 @@ select:focus {
 .toggle input[type="checkbox"] {
   width: 1.15rem;
   height: 1.15rem;
-  margin: 0.1rem 0 0;
+  margin: 0.15rem 0 0;
   flex: none;
-  accent-color: var(--gold);
+  accent-color: var(--accent);
   cursor: pointer;
 }
 
@@ -224,43 +369,49 @@ select:focus {
   gap: 0.9rem;
 }
 
-@media (max-width: 620px) {
-  .row2 { grid-template-columns: 1fr; }
-}
-
 /* -------------------------------------------------------------- buttons -- */
 
 .btn {
   font: inherit;
-  font-size: 0.88rem;
+  font-size: 0.87rem;
   font-weight: 600;
-  padding: 0.55rem 1.1rem;
+  padding: 0.55rem 1rem;
   border-radius: var(--r-sm);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   background: #fff;
   color: var(--mocha);
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
   transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease),
-    color var(--fast) var(--ease);
+    color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
 }
 
-.btn:hover:not(:disabled) { border-color: var(--gold); }
-.btn:disabled { opacity: 0.55; cursor: default; }
+.btn:hover:not(:disabled) {
+  border-color: var(--caramel);
+  background: var(--card-sunk);
+}
+
+.btn:active:not(:disabled) { transform: translateY(0.5px); }
+.btn:disabled { opacity: 0.5; cursor: default; }
 
 .btn--primary {
-  background: var(--coffee);
-  border-color: var(--coffee);
-  color: var(--cream);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
 }
 
 .btn--primary:hover:not(:disabled) {
-  background: var(--espresso);
-  border-color: var(--espresso);
+  background: var(--accent-ink);
+  border-color: var(--accent-ink);
+  color: var(--on-accent);
 }
 
 .btn--danger {
   background: #fff;
-  border-color: rgba(162, 69, 47, 0.5);
+  border-color: rgba(179, 64, 44, 0.45);
   color: var(--bad);
 }
 
@@ -272,7 +423,7 @@ select:focus {
 
 .btn--small {
   font-size: 0.78rem;
-  padding: 0.35rem 0.7rem;
+  padding: 0.35rem 0.65rem;
 }
 
 .actions-row {
@@ -286,30 +437,19 @@ select:focus {
 
 .notice {
   border-radius: var(--r-sm);
-  padding: 0.65rem 0.85rem;
-  font-size: 0.85rem;
-  line-height: 1.5;
+  padding: 0.7rem 0.9rem;
+  font-size: 0.86rem;
+  line-height: 1.55;
   margin: 0 0 var(--s4);
   border: 1px solid;
+  /* The stripe carries the meaning at a glance; the tint is only there to stop
+     the stripe looking like a stray border. */
+  border-left-width: 3px;
 }
 
-.notice--warn {
-  background: rgba(201, 151, 63, 0.14);
-  border-color: rgba(201, 151, 63, 0.55);
-  color: #7a5320;
-}
-
-.notice--bad {
-  background: rgba(162, 69, 47, 0.12);
-  border-color: rgba(162, 69, 47, 0.5);
-  color: var(--bad);
-}
-
-.notice--ok {
-  background: rgba(78, 125, 63, 0.12);
-  border-color: rgba(78, 125, 63, 0.45);
-  color: #33562a;
-}
+.notice--warn { background: var(--warn-soft); border-color: rgba(138, 90, 16, 0.35); border-left-color: var(--warn); color: #6d4708; }
+.notice--bad { background: var(--bad-soft); border-color: rgba(179, 64, 44, 0.3); border-left-color: var(--bad); color: #8d3022; }
+.notice--ok { background: var(--ok-soft); border-color: rgba(31, 122, 77, 0.3); border-left-color: var(--ok); color: #17603c; }
 
 /* A save confirmation that fades rather than sitting there being read twice. */
 .flash {
@@ -319,7 +459,7 @@ select:focus {
   transform: translateX(-50%);
   background: var(--espresso);
   color: var(--cream);
-  padding: 0.6rem 1.2rem;
+  padding: 0.65rem 1.2rem;
   border-radius: var(--r-pill);
   font-size: 0.88rem;
   box-shadow: var(--shadow-lift);
@@ -327,7 +467,65 @@ select:focus {
   pointer-events: none;
   transition: opacity var(--slow) var(--ease);
   z-index: 40;
+  max-width: calc(100vw - 2rem);
+  text-align: center;
 }
 
 .flash.is-on { opacity: 1; }
 .flash[data-kind="bad"] { background: var(--bad); }
+
+/* ----------------------------------------------------------- responsive --
+
+   Three sizes, and the one that matters is the smallest: moderation happens
+   behind a counter on whatever is to hand. Everything below is about keeping
+   the queue and its two buttons reachable with a thumb, not about making a
+   desktop layout survive being squeezed. */
+
+@media (max-width: 900px) {
+  .top__inner { padding: 0.7rem 1rem; }
+  .wrap { padding: 1.2rem 1rem 4rem; }
+}
+
+@media (max-width: 620px) {
+  .row2 { grid-template-columns: 1fr; }
+
+  /* Brand and sign-out on the first line, links scrolling underneath: the
+     header keeps one height instead of growing to three rows of wrapped nav. */
+  .top__inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem 0.75rem;
+    align-items: center;
+  }
+
+  .top__brand { font-size: 0.95rem; grid-column: 1; }
+  .top__out { grid-column: 2; grid-row: 1; }
+  .top__nav {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin: 0 -1rem;
+    padding: 0 1rem;
+  }
+
+  /* The signed-in address is the least useful thing on a 360px header. */
+  .top__who { display: none; }
+
+  .card { padding: 0.95rem; }
+  h2 { font-size: 0.78rem; }
+
+  /* Anything asking for a decision gets the full width rather than sitting in
+     a row of half-width buttons too narrow to read. */
+  .actions-row .btn { flex: 1 1 auto; }
+}
+
+/* Touch: the 44px floor applies to the controls a decision runs through, not
+   to every icon button, or the editors turn into a page of slabs. */
+@media (pointer: coarse) {
+  .btn { min-height: 44px; }
+  .btn--small { min-height: 36px; }
+  .toggle input[type="checkbox"] { width: 1.35rem; height: 1.35rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}

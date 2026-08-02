@@ -93,7 +93,7 @@
   .bar {
     position: sticky;
     bottom: 0;
-    background: linear-gradient(180deg, rgba(253, 248, 239, 0) 0%, var(--cream) 45%);
+    background: linear-gradient(180deg, rgba(244, 246, 248, 0) 0%, var(--page) 55%);
     padding: 1.2rem 0 0.9rem;
     display: flex;
     flex-wrap: wrap;
@@ -107,7 +107,12 @@
 
   .is-armed { background: var(--bad) !important; border-color: var(--bad) !important; color: #fff !important; }
 
-  .side .card { position: sticky; top: 1rem; }
+  .side .card { position: sticky; top: calc(var(--top-h, 68px) + 1rem); }
+
+  @media (max-width: 900px) {
+    .cols { gap: 1.25rem; }
+    .side .card { position: static; }
+  }
   .side ul { margin: 0.4rem 0 0; padding-left: 1.1rem; font-size: 0.83rem; color: var(--ink-soft); line-height: 1.7; }
 </style>
 </head>

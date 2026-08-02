@@ -204,6 +204,32 @@ and the button, and checked again on the server — because a ticked box is a cl
 the page makes, and anything that skips the page would otherwise put a face on a
 public screen with no agreement behind it at all.
 
+## The admin looks like a tool, not like a cafe
+
+The signed-in pages used to wear the cafe's cream and gold. That was fine while
+a cafe was the only thing they managed and stopped being fine the day the same
+tool started editing a jeweller's rate board — the chrome was making a claim
+about the content that was no longer true.
+
+They are now a neutral console: slate surfaces, one accent, dense enough to work
+at the end of a shift under bad lighting. The accent is the only part that
+moves. `data-vertical` on `<body>`, set from the URL in `admin-shell.js`, colours
+the hairline under the header amber on a cafe's pages and indigo on the
+jeweller's, so somebody with four tabs open can tell at a glance which screen
+they are about to edit. Sign-in and the owner console belong to no screen and
+keep the neutral default.
+
+`admin.css` redefines the *values* of the tokens theme.css names, rather than
+renaming anything — so every page-level rule that already said `var(--line)`
+followed along without being touched.
+
+Responsive across all three sizes, with the smallest treated as the real one:
+moderation happens behind a counter on whatever is to hand. On a phone the
+header keeps one height and scrolls its links sideways, the queue's rows put the
+photo and sender on one line with Approve and Reject spanning the full width
+underneath, and the accounts table scrolls inside its card rather than crushing
+five columns of emails. Every decision control clears 44px on a touch screen.
+
 ## Automatic moderation
 
 A selfie wall in a public room is a screen strangers can write on. Every upload
@@ -566,7 +592,7 @@ api/index.js       Vercel serverless entry point
 vercel.json        routes non-static requests to the Express app
 public/menu.json   board content: items, prices, copy — edit this, not the HTML
 public/theme.css   shared cafe palette + the branded photo frame
-public/admin.css   shared chrome for the signed-in pages
+public/admin.css   shared chrome for the signed-in pages: neutral console, accent per vertical
 public/admin-shell.js  session, header and API helper shared by those pages
 public/landing.html  the marketing page served at /
 public/login.html  staff sign-in
