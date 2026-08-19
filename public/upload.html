@@ -491,15 +491,15 @@ $('message').addEventListener('input', (e) => {
    inspects the image as a data URL, and an oversized one would be waved
    through unscreened. Everything that can be uploaded can be checked. */
 
-const LIMIT = 12 * 1024 * 1024;
+const LIMIT = 4 * 1024 * 1024;
 /* Steps tried in order until one fits. Full size at near-lossless quality
    first, so a photo only loses pixels once losing bytes has stopped working. */
 const FALLBACKS = [
-  { edge: Infinity, quality: 0.95 },
-  { edge: Infinity, quality: 0.88 },
-  { edge: 4096, quality: 0.9 },
-  { edge: 3000, quality: 0.88 },
-  { edge: 2200, quality: 0.85 },
+  { edge: Infinity, quality: 0.92 },
+  { edge: Infinity, quality: 0.85 },
+  { edge: 3840, quality: 0.85 },
+  { edge: 2560, quality: 0.82 },
+  { edge: 1920, quality: 0.80 },
 ];
 
 /** The processed file to submit, or null to send the original untouched. */
@@ -508,19 +508,53 @@ let reduced = false;
 
 const kb = (n) => (n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`);
 
+async function loadImageElement(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = (err) => {
+      URL.revokeObjectURL(url);
+      reject(err);
+    };
+    img.src = url;
+  });
+}
+
 async function fitToLimit(file) {
   if (file.size <= LIMIT) return null;                // send it as it came
 
-  // imageOrientation honours EXIF, so portrait phone shots aren't rotated.
-  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  let source = null;
+  let isBitmap = false;
+
+  try {
+    source = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    isBitmap = true;
+  } catch (err) {
+    try {
+      source = await loadImageElement(file);
+      isBitmap = false;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  const width = source.naturalWidth || source.width;
+  const height = source.naturalHeight || source.height;
+  if (!width || !height) return null;
+
   const canvas = document.createElement('canvas');
 
   try {
     for (const { edge, quality } of FALLBACKS) {
-      const scale = Math.min(1, edge / Math.max(bitmap.width, bitmap.height));
-      canvas.width = Math.round(bitmap.width * scale);
-      canvas.height = Math.round(bitmap.height * scale);
-      canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const scale = Math.min(1, edge / Math.max(width, height));
+      canvas.width = Math.round(width * scale);
+      canvas.height = Math.round(height * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
 
       const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', quality));
       if (blob && blob.size <= LIMIT) {
@@ -529,7 +563,7 @@ async function fitToLimit(file) {
     }
     return null;   // nothing fit; let the server say so rather than guessing
   } finally {
-    bitmap.close?.();
+    if (isBitmap && source.close) source.close();
   }
 }
 
@@ -549,8 +583,7 @@ $('photo').addEventListener('change', async (e) => {
     prepared = await fitToLimit(file);
     reduced = Boolean(prepared);
   } catch (err) {
-    // Unsupported format or a browser without createImageBitmap: send as-is
-    // and let the server's limit have the last word.
+    // Unsupported format: send as-is
   }
 
   const used = prepared || file;
@@ -603,7 +636,18 @@ form.addEventListener('submit', async (e) => {
     // signature and the clock; this only gets it there.
     body.set('pass', PASS);
     const res = await fetch(at('/upload'), { method: 'POST', body });
-    const data = await res.json();
+    
+    let data = {};
+    const text = await res.text();
+    try {
+      data = JSON.parse(text);
+    } catch (jsonErr) {
+      if (res.status === 413 || /request entity too large|payload too large/i.test(text)) {
+        throw new Error('This photo is too large for the server. Please try taking another photo.');
+      }
+      throw new Error(`Upload failed (${res.status}): ${text.slice(0, 120) || 'Unknown server error'}`);
+    }
+
     if (!res.ok) {
       // Carry the operator-facing detail alongside the friendly message; the
       // person debugging the wall is usually the person holding the phone.
